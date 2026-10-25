@@ -17,7 +17,7 @@ function Example({
         storageKey: 'column-settings-test',
         columns: [
             { id: 'name', label: 'Nome', canHide: false },
-            { id: 'amount', label: 'Importo' },
+            { id: 'amount', label: 'Importo', className: 'text-center' },
             ...(actions
                 ? [{ id: 'actions', label: 'Azioni', canHide: false }]
                 : []),
@@ -89,5 +89,15 @@ describe('Column settings in table headers', () => {
         expect(html).toMatch(
             /<button[^>]*disabled=""[^>]*aria-label="Colonne"/,
         );
+    });
+
+    it('centers the label without letting the column settings shift it', () => {
+        const html = renderToStaticMarkup(<Example />);
+        const headers = html.match(/<th(?:\s[^>]*)?>[\s\S]*?<\/th>/g)!;
+        expect(headers[1]).toContain('text-center');
+        expect(headers[1]).toContain('justify-center');
+        expect(headers[1]).toContain('px-8');
+        expect(headers[1]).toContain('absolute right-0');
+        expect(headers[1]).toContain('aria-label="Colonne"');
     });
 });

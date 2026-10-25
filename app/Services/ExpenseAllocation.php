@@ -17,9 +17,30 @@ class ExpenseAllocation
     /** @param array<string, mixed> $data */
     public function needsBudgetReassignment(Tenant $tenant, Expense $expense, array $data): bool
     {
-        return $expense->contract_id === null && $expense->project_id === null
-            && ((isset($data['contract_id']) ? 1 : 0) + (isset($data['project_id']) ? 1 : 0) === 1)
-            && $tenant->budgetEntries()->where('expense_id', $expense->id)->exists();
+        $draft = clone $expense;
+        $draft->fill(array_intersect_key($data, ['contract_id' => true, 'project_id' => true]));
+        if (! $draft->isDirty(['contract_id', 'project_id']) ||
+            (($draft->contract_id !== null ? 1 : 0) + ($draft->project_id !== null ? 1 : 0) !== 1)) {
+            return false;
+        }
+        $direct = $tenant->budgetEntries()->where('expense_id', $expense->id)->exists();
+        if ($direct) {
+            return $expense->contract_id === null && $expense->project_id === null;
+        }
+        if ($expense->contract_id !== null && $expense->project_id !== null) {
+            return false;
+        }
+        app(ExpenseWriter::class)->persist($draft, $data, write: false);
+        $sourceType = $expense->contract_id !== null ? 'contract' : ($expense->project_id !== null ? 'project' : 'expense');
+        $targetType = $draft->contract_id !== null ? 'contract' : 'project';
+        $beforeYears = ExpenseOverview::economicQuery($tenant)->where('id', $expense->id)->pluck('year');
+        $afterYears = ExpenseOverview::draftRows($draft)->pluck('year');
+        $before = $tenant->budgetEntries()->where($sourceType.'_id', $sourceType === 'expense' ? $expense->id : $expense->getAttribute($sourceType.'_id'))
+            ->whereHas('budgetYear', fn ($query) => $query->whereIn('year', $beforeYears))->orderBy('budget_year_id')->pluck('budget_year_id')->all();
+        $after = $tenant->budgetEntries()->where($targetType.'_id', $draft->getAttribute($targetType.'_id'))
+            ->whereHas('budgetYear', fn ($query) => $query->whereIn('year', $afterYears))->orderBy('budget_year_id')->pluck('budget_year_id')->all();
+
+        return $before !== $after;
     }
 
     /** @param array<string, mixed> $data
@@ -30,7 +51,7 @@ class ExpenseAllocation
         $type = isset($data['contract_id']) ? 'contract' : 'project';
         $target = $tenant->{$type.'s'}()->whereKey($data[$type.'_id'] ?? 0)->first();
         if ($target === null || ! $this->needsBudgetReassignment($tenant, $expense, $data)) {
-            throw ValidationException::withMessages(['budget' => 'Scegli un solo contratto o progetto per una spesa autonoma presente nel Budget. Rimuovi esplicitamente eventuali collegamenti precedenti.']);
+            throw ValidationException::withMessages(['budget' => 'Scegli un solo contratto o progetto che modifichi l’inclusione della spesa nel Budget. Rimuovi esplicitamente eventuali collegamenti precedenti.']);
         }
         $expense->load(['lines', 'costCenters']);
         $direct = $tenant->budgetEntries()->where('expense_id', $expense->id)->with('budgetYear')->orderBy('id')->get();
@@ -40,7 +61,7 @@ class ExpenseAllocation
         try {
             // Prepare the full form without bypassing the normal writer's Budget guard.
             app(ExpenseWriter::class)->persist($draft, array_diff_key($data, ['contract_id' => true, 'project_id' => true, 'contract_entry' => true]), write: false);
-            $draft->setAttribute($type.'_id', $target->id);
+            $draft->fill(array_intersect_key($data, ['contract_id' => true, 'project_id' => true]));
             ExpensePeriods::validate($draft);
             $afterRows = ExpenseOverview::draftRows($draft)->keyBy('year');
             if ($target->year === null || $afterRows->contains(fn ($row) => $row->year !== $target->year)) {
@@ -78,7 +99,11 @@ class ExpenseAllocation
             }
             $withTarget = $after;
             $directYear = $direct->contains(fn ($entry) => $entry->budgetYear->year === $year);
-            if ($directYear && $destination === null && $budgetYear !== null) {
+            $includedBefore = isset($before['owners'][$expense->id]);
+            if ($includedBefore !== isset($after['owners'][$expense->id])) {
+                $automatic = false;
+            }
+            if (($directYear || $includedBefore) && $destination === null && $budgetYear !== null) {
                 $automatic = false;
                 try {
                     AnnualBudget::validateSource($tenant, $budgetYear, $target);
@@ -130,8 +155,8 @@ class ExpenseAllocation
         return DB::transaction(function () use ($tenant, $expense, $data, $token, $choice): ?Expense {
             Tenant::whereKey($tenant->id)->lockForUpdate()->firstOrFail();
             $expense = $tenant->expenses()->whereKey($expense->id)->lockForUpdate()->firstOrFail();
-            ExpensePeriods::lockContracts($tenant, [$data['contract_id'] ?? null]);
-            $tenant->projects()->whereKey($data['project_id'] ?? 0)->lockForUpdate()->first();
+            ExpensePeriods::lockContracts($tenant, [$expense->contract_id, $data['contract_id'] ?? null]);
+            $tenant->projects()->whereIn('id', array_filter([$expense->project_id, $data['project_id'] ?? null]))->orderBy('id')->lockForUpdate()->get();
             $years = $tenant->budgetYears()->orderBy('id')->lockForUpdate()->get()->keyBy('id');
             $entries = $tenant->budgetEntries()->where('expense_id', $expense->id)->orderBy('id')->lockForUpdate()->get();
             abort_unless($this->needsBudgetReassignment($tenant, $expense, $data), 409, 'I collegamenti sono cambiati. Ricarica l’anteprima prima di confermare.');
@@ -148,8 +173,10 @@ class ExpenseAllocation
             }
             app(ExpenseWriter::class)->persist($expense, $data);
             if ($choice === 'add') {
-                foreach ($entries->pluck('budget_year_id')->unique() as $yearId) {
-                    app(BudgetController::class)->add($tenant, $years->get($yearId), ['type' => $preview['target']['type'], 'source_id' => $preview['target']['id'], 'restore' => true], 0);
+                foreach ($preview['years'] as $row) {
+                    if ($row['budget_id'] !== null && $row['destination'] === 'missing' && $row['budget_after']['add'] !== $row['budget_after']['link']) {
+                        app(BudgetController::class)->add($tenant, $years->get($row['budget_id']), ['type' => $preview['target']['type'], 'source_id' => $preview['target']['id'], 'restore' => true], 0);
+                    }
                 }
             }
 

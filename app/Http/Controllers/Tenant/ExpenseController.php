@@ -114,7 +114,7 @@ class ExpenseController extends Controller
             return $locked;
         });
         if ($record === null) {
-            return response()->json(['code' => 'budget_reassignment_required', 'message' => 'Scegli se aggiungere anche il contenitore al Budget.'], 422);
+            return response()->json(['code' => 'budget_reassignment_required', 'message' => 'Verifica come cambia l’inclusione della spesa nel Budget prima di confermare.'], 422);
         }
 
         return response()->json(['warnings' => array_filter([ExpensePeriods::overlapWarning($record)]), 'record' => $record->load(['vendor:id,name', 'contract:id,name', 'project:id,name', 'lines', 'costCenters.parent:id,name'])]);
@@ -186,6 +186,7 @@ class ExpenseController extends Controller
         ])->validate();
 
         $warnings = DB::transaction(function () use ($tenant, $data): array {
+            Tenant::whereKey($tenant->id)->lockForUpdate()->firstOrFail();
             $records = $tenant->expenses()->whereIn('id', array_column($data['updates'], 'id'))->orderBy('id')->lockForUpdate()->get()->keyBy('id');
             ExpensePeriods::lockContracts($tenant, [...$records->pluck('contract_id')->all(), ...array_column($data['updates'], 'contract_id')]);
             foreach ($data['updates'] as $index => $update) {
@@ -193,6 +194,9 @@ class ExpenseController extends Controller
                 abort_unless($record !== null, 404);
                 unset($update['id']);
                 try {
+                    if (app(ExpenseAllocation::class)->needsBudgetReassignment($tenant, $record, $update)) {
+                        throw ValidationException::withMessages(['budget' => 'Modifica il collegamento di questa spesa singolarmente per verificare l’anteprima del Budget.']);
+                    }
                     app(ExpenseWriter::class)->persist($record, $update);
                 } catch (ValidationException $error) {
                     $errors = [];

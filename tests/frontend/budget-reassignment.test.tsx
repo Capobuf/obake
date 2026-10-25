@@ -10,11 +10,9 @@ import {
     InlineEdit,
     saveInlineRecord,
 } from '../../resources/js/components/management/inline-edit';
-import {
-    BudgetReassignmentComparison,
-    BudgetReassignmentRequired,
-} from '../../resources/js/components/management/budget-reassignment';
-import type { BudgetReassignmentPreview } from '../../resources/js/components/management/budget-reassignment';
+import { BudgetReassignmentRequired } from '../../resources/js/components/management/budget-reassignment';
+import { BudgetLinkPreview } from '../../resources/js/components/management/budget-link-preview';
+import type { BudgetReassignmentPreview } from '../../resources/js/components/management/budget-link-preview';
 
 const mocks = vi.hoisted(() => ({
     detailsOpen: false,
@@ -238,13 +236,9 @@ const preview: BudgetReassignmentPreview = {
         },
     ],
 };
-function renderPreview(data = preview) {
+function renderPreview(data = preview, busy = false) {
     return renderToStaticMarkup(
-        <BudgetReassignmentComparison
-            preview={data}
-            onChoose={vi.fn()}
-            busy={false}
-        />,
+        <BudgetLinkPreview preview={data} onChoose={vi.fn()} busy={busy} />,
     );
 }
 
@@ -274,6 +268,94 @@ it('shows only the unchanged message when totals stay the same', () => {
     expect(html.match(/Il totale resta invariato./g)).toHaveLength(2);
     expect(html).not.toContain('<dl');
     expect(html).not.toContain('Variazione');
+});
+
+it('offers one confirmation when the destination is already in the Budget', () => {
+    const year = preview.years[0];
+    const html = renderPreview({
+        ...preview,
+        years: [
+            {
+                ...year,
+                direct_entries: [],
+                destination: 'present',
+                budget_after: {
+                    add: year.budget_after.add,
+                    link: year.budget_after.add,
+                },
+                difference: {
+                    add: year.difference.add,
+                    link: year.difference.add,
+                },
+            },
+        ],
+    });
+    expect(html).toContain('Conferma collegamento');
+    expect(html).toContain('Progetto già nel Budget');
+    expect(html).toContain('anche i suoi importi entrano nel Budget');
+    expect(html).toContain('600,00');
+    expect(html).toContain('+500,00');
+    expect(html).not.toContain('Collega e aggiungi al Budget');
+    expect(html).not.toContain('Collega senza aggiungere');
+});
+
+it.each(['contract', 'project'] as const)(
+    'reuses the single choice for an included %s and ignores years without a Budget',
+    (type) => {
+        const year = preview.years[0];
+        const html = renderPreview({
+            ...preview,
+            target: { ...preview.target, type },
+            years: [
+                { ...year, destination: 'present' },
+                {
+                    ...year,
+                    year: 2027,
+                    budget_id: null,
+                    destination: 'missing',
+                },
+            ],
+        });
+        expect(html).toContain(
+            type === 'contract'
+                ? 'Contratto già nel Budget'
+                : 'Progetto già nel Budget',
+        );
+        expect(html).toContain('Conferma collegamento');
+        expect(html).not.toContain('Collega e aggiungi al Budget');
+        expect(html).toContain('Nessun Budget per questo anno.');
+        expect(api).not.toHaveBeenCalled();
+    },
+);
+
+it.each(['present', 'missing'] as const)(
+    'disables every action while saving with destination %s',
+    (destination) => {
+        const html = renderPreview(
+            {
+                ...preview,
+                years: [{ ...preview.years[0], destination }],
+            },
+            true,
+        );
+        expect(html.match(/disabled=""/g)).toHaveLength(
+            destination === 'present' ? 1 : 2,
+        );
+    },
+);
+
+it('keeps invalid single-choice previews blocked with their explanation', () => {
+    const invalid = { valid: false, problem: 'Verifica gli anni.' };
+    const html = renderPreview({
+        ...preview,
+        ...invalid,
+        choices: { add: invalid, link: invalid },
+        years: [{ ...preview.years[0], destination: 'present' }],
+    });
+    expect(html).toContain('Verifica gli anni.');
+    expect(html.match(/disabled=""/g)).toHaveLength(1);
+    expect(html).not.toContain('<dl');
+    expect(html).not.toContain('Dettagli economici');
 });
 
 it('disables only the unavailable choice with its explanation', () => {

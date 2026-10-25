@@ -415,8 +415,9 @@ export function ExpenseTable({
                                     }
                                     className="py-10 text-center whitespace-normal text-muted-foreground"
                                 >
-                                    Nessuna spesa in questo perimetro. Aggiungi
-                                    una spesa oppure modifica i filtri.
+                                    {filters?.search
+                                        ? 'Nessun risultato per la ricerca'
+                                        : 'Nessuna spesa in questo perimetro. Aggiungi una spesa oppure modifica i filtri.'}
                                 </TableCell>
                             </TableRow>
                         )}

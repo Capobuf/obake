@@ -92,9 +92,7 @@ class CatalogController extends Controller
             ? $request->string('sort')->toString() : null;
         $direction = $request->input('direction') === 'desc' ? 'desc' : 'asc';
         // Keep KPI and chart totals tied to the selected year, independently of table filters.
-        if ($search = $request->string('search')->trim()->toString()) {
-            $expenses->where('title', 'like', '%'.$search.'%');
-        }
+        ExpenseOverview::search($expenses, $request->string('search')->toString());
         foreach (['vendor_id', 'contract_id', 'project_id'] as $relation) {
             if ($relation !== $field && $request->filled($relation)) {
                 $request->input($relation) === 'none'

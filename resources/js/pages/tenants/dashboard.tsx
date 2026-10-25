@@ -55,7 +55,7 @@ export default function TenantDashboard(
                     <div className="mt-1 flex flex-wrap items-center gap-2">
                         <h1 className="mr-auto page-title">Panoramica</h1>
                         <DashboardFilters
-                            key={JSON.stringify([tenant.slug, filters])}
+                            key={`${tenant.slug}:${year}`}
                             {...props}
                             path={path}
                         />

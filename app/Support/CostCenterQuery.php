@@ -15,9 +15,11 @@ final class CostCenterQuery
         $query = $tenant->costCenters()->whereNull('parent_id')
             ->withCount(['expenses', 'projects', 'contracts'])
             ->with(['children' => fn ($query) => $query->withCount(['expenses', 'projects', 'contracts'])]);
-        if ($search = $request->string('search')->trim()->toString()) {
-            $query->where(fn ($query) => $query->where('name', 'like', '%'.$search.'%')
-                ->orWhereHas('children', fn ($children) => $children->where('name', 'like', '%'.$search.'%')));
+        $search = $request->string('search')->trim()->toString();
+        if ($search !== '') {
+            $pattern = TableSearch::pattern($search);
+            $query->where(fn ($query) => $query->whereRaw("LOWER(name) LIKE ? ESCAPE '!'", [$pattern])
+                ->orWhereHas('children', fn ($children) => $children->whereRaw("LOWER(name) LIKE ? ESCAPE '!'", [$pattern])));
         }
 
         return $query->getQuery();

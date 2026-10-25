@@ -63,9 +63,7 @@ final class ExpenseOverview
         if ($withYear) {
             $query->where('year', EconomicYearContext::year($tenant, $request));
         }
-        if ($search = $request->string('search')->trim()->toString()) {
-            $query->where('title', 'like', '%'.$search.'%');
-        }
+        self::search($query, $request->string('search')->toString());
         foreach (['vendor_id', 'contract_id', 'project_id'] as $field) {
             if ($request->filled($field)) {
                 $request->input($field) === 'none'
@@ -75,6 +73,50 @@ final class ExpenseOverview
         }
 
         return $query;
+    }
+
+    /** Search economic rows, including only lines attributed to that row's year.
+     * @param  Builder<Expense>  $query
+     * @return Builder<Expense>
+     */
+    public static function search(Builder $query, string $search): Builder
+    {
+        if (trim($search) === '') {
+            return $query;
+        }
+        $pattern = TableSearch::pattern($search);
+        $amount = TableSearch::amount($search);
+
+        return $query->where(function ($match) use ($pattern, $amount) {
+            foreach (['title', 'notes'] as $field) {
+                $match->orWhereRaw("LOWER(expenses.$field) LIKE ? ESCAPE '!'", [$pattern]);
+            }
+            foreach (['vendor', 'contract', 'project', 'costCenters', 'costCenters.parent'] as $relation) {
+                $match->orWhereHas($relation, fn ($related) => $related->whereRaw("LOWER(name) LIKE ? ESCAPE '!'", [$pattern]));
+            }
+            $match->orWhereHas('lines', function ($lines) use ($pattern, $amount) {
+                $lines->where(function ($year) {
+                    $year->whereColumn('expense_lines.year', 'expenses.year')
+                        ->orWhere(fn ($legacy) => $legacy->whereNull('expense_lines.year')
+                            ->whereIn('expense_id', DB::table('expenses as original')->select('id')->whereColumn('original.year', 'expenses.year')));
+                })->where(function ($line) use ($pattern, $amount) {
+                    $line->whereRaw("LOWER(description) LIKE ? ESCAPE '!'", [$pattern]);
+                    if ($amount !== null) {
+                        $line->orWhere('unit_price', $amount)->orWhere('total', $amount);
+                    }
+                });
+            });
+            if ($amount !== null) {
+                $cents = Money::cents($amount);
+                foreach (['allocated_amount', 'actual_amount'] as $field) {
+                    $match->orWhereRaw("CAST(ROUND($field * 100, 0) AS SIGNED) = ?", [$cents]);
+                }
+                $match->orWhere(function ($variance) use ($cents) {
+                    $variance->where(fn ($present) => $present->whereNotNull('allocated_amount')->orWhereNotNull('actual_amount'))
+                        ->whereRaw('COALESCE(CAST(ROUND(actual_amount * 100, 0) AS SIGNED), 0) - COALESCE(CAST(ROUND(allocated_amount * 100, 0) AS SIGNED), 0) = ?', [$cents]);
+                });
+            }
+        });
     }
 
     /** @param Builder<Expense> $query

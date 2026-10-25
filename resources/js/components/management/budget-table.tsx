@@ -1,3 +1,5 @@
+import { TableSearchInput } from './table-search-input';
+import { budgetSearchMatch } from './budget-search';
 import { budgetSummaryColumns } from './budget-summary-columns';
 import { BudgetPrintDialog } from './budget-print-dialog';
 import { captureBudgetReport } from './budget-report';
@@ -67,7 +69,6 @@ import {
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
-import { InputGroup, InputGroupInput } from '@/components/ui/input-group';
 import { Field, FieldGroup, FieldLabel } from '@/components/ui/field';
 import {
     Table,
@@ -825,6 +826,26 @@ export function BudgetTable({
             preserveScroll: true,
         });
     }
+    const searchMatches = useMemo(
+        () =>
+            new Map(
+                budget.entries.map((entry) => [
+                    entry.id,
+                    budgetSearchMatch(entry, search),
+                ]),
+            ),
+        [budget.entries, search],
+    );
+    const openDetails = useMemo(
+        () =>
+            new Set([
+                ...details,
+                ...budget.entries
+                    .filter((entry) => searchMatches.get(entry.id)?.expand)
+                    .map((entry) => entry.id),
+            ]),
+        [details, budget.entries, searchMatches],
+    );
     const hasFilters =
         !!search ||
         typeFilter !== 'all' ||
@@ -949,10 +970,10 @@ export function BudgetTable({
                         variant="ghost"
                         aria-label={`Dettaglio ${row.original.description}`}
                         aria-controls={`budget-detail-${row.original.id}`}
-                        aria-expanded={details.includes(row.original.id)}
+                        aria-expanded={openDetails.has(row.original.id)}
                         onClick={() => toggleDetail(row.original.id)}
                     >
-                        {details.includes(row.original.id) ? (
+                        {openDetails.has(row.original.id) ? (
                             <ChevronDown />
                         ) : (
                             <ChevronRight />
@@ -1011,7 +1032,7 @@ export function BudgetTable({
                                                 disabled={busy || loading}
                                                 aria-label={`${completionLabel(row.original)}: ${row.original.description}`}
                                                 aria-controls={`budget-detail-${row.original.id}`}
-                                                aria-expanded={details.includes(
+                                                aria-expanded={openDetails.has(
                                                     row.original.id,
                                                 )}
                                                 onClick={() =>
@@ -1152,7 +1173,7 @@ export function BudgetTable({
                                         size="sm"
                                         className="h-auto min-h-8 w-full justify-end financial-value tabular-nums"
                                         aria-label={`Mostra le spese di ${row.original.description}: ${columnNames[field]}`}
-                                        aria-expanded={details.includes(
+                                        aria-expanded={openDetails.has(
                                             row.original.id,
                                         )}
                                         onClick={() =>
@@ -1258,7 +1279,7 @@ export function BudgetTable({
             busy,
             loading,
             centers,
-            details,
+            openDetails,
             completionTarget,
             mutate,
             onExpenseEdit,
@@ -1313,7 +1334,7 @@ export function BudgetTable({
         state: {
             sorting,
             rowSelection: selection,
-            expanded,
+            expanded: search.trim() ? true : expanded,
             globalFilter: search,
             grouping,
             columnVisibility: preferences.visibility,
@@ -1339,28 +1360,21 @@ export function BudgetTable({
                         : value,
             }),
         enableRowSelection: (row) => !row.getIsGrouped(),
-        globalFilterFn: (row, _column, value: string) =>
-            [
-                row.original.description,
-                row.original.vendor?.name,
-                row.original.cost_center?.name,
-                budgetLabels[row.original.type],
-            ].some((text) =>
-                text
-                    ?.toLocaleLowerCase('it')
-                    .includes(value.toLocaleLowerCase('it')),
-            ),
+        globalFilterFn: (row) =>
+            searchMatches.get(row.original.id)?.matches ?? false,
         getCoreRowModel: getCoreRowModel(),
         getFilteredRowModel: getFilteredRowModel(),
         getGroupedRowModel: getGroupedRowModel(),
         getSortedRowModel: getSortedRowModel(),
         getExpandedRowModel: getExpandedRowModel(),
     });
-    const dragDisabled = busy || loading || sorting.length > 0;
-    const dragDisabledReason =
-        sorting.length > 0
-            ? 'Ripristina ordine manuale per trascinare le voci'
-            : 'Attendi il completamento del salvataggio o aggiornamento';
+    const dragDisabled =
+        busy || loading || sorting.length > 0 || !!search.trim();
+    const dragDisabledReason = search.trim()
+        ? 'Cancella la ricerca per riordinare le voci'
+        : sorting.length > 0
+          ? 'Ripristina ordine manuale per trascinare le voci'
+          : 'Attendi il completamento del salvataggio o aggiornamento';
     const dragLabel = (id: string | number) =>
         budget.entries.find((entry) => String(entry.id) === String(id))
             ?.description ?? String(id);
@@ -1407,7 +1421,7 @@ export function BudgetTable({
                     disabled={dragDisabled}
                     disabledReason={dragDisabledReason}
                 />
-                {details.includes(entry.id) &&
+                {openDetails.has(entry.id) &&
                     (dragging ? (
                         // Retain the detail height while suspending its contents so drag targets do not jump.
                         <TableRow aria-hidden="true">
@@ -1473,9 +1487,10 @@ export function BudgetTable({
             </Fragment>
         );
     }
-    const selected = budget.entries
-        .filter((entry) => selection[String(entry.id)])
-        .map((entry) => entry.id);
+    const selected = table
+        .getFilteredSelectedRowModel()
+        .flatRows.filter((row) => !row.getIsGrouped())
+        .map((row) => row.original.id);
     const visibleColumns = table.getVisibleLeafColumns();
     const summaryColumns = budgetSummaryColumns(visibleColumns);
     const entryIds = table
@@ -1684,25 +1699,6 @@ export function BudgetTable({
                     disabled={busy}
                 >
                     <FieldGroup className="gap-4">
-                        <Field>
-                            <FieldLabel htmlFor="budget-search">
-                                Ricerca
-                            </FieldLabel>
-                            <InputGroup>
-                                <InputGroupInput
-                                    id="budget-search"
-                                    aria-label="Cerca nelle voci del Budget"
-                                    placeholder="Cerca nelle voci…"
-                                    value={search}
-                                    onChange={(event) => {
-                                        setSearch(event.target.value);
-                                        changeFilters({
-                                            search: event.target.value,
-                                        });
-                                    }}
-                                />
-                            </InputGroup>
-                        </Field>
                         <FilterSelect
                             label="Filtra per tipo"
                             value={typeFilter}
@@ -1783,6 +1779,14 @@ export function BudgetTable({
                         Inserisci spese mancanti
                     </Button>
                 )}
+                <TableSearchInput
+                    value={search}
+                    disabled={busy}
+                    onChange={(value) => {
+                        setSearch(value);
+                        changeFilters({ search: value });
+                    }}
+                />
                 {sorting.length > 0 && (
                     <Button
                         size="sm"
@@ -1978,8 +1982,9 @@ export function BudgetTable({
                                             {budget.entries.length ? (
                                                 <EmptyHeader>
                                                     <EmptyTitle>
-                                                        Nessuna voce corrisponde
-                                                        ai filtri
+                                                        {search.trim()
+                                                            ? 'Nessun risultato per la ricerca'
+                                                            : 'Nessuna voce corrisponde ai filtri'}
                                                     </EmptyTitle>
                                                     <EmptyDescription>
                                                         Aggiungi contratti,

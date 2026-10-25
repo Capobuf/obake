@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import {
     Bar,
     BarChart,
@@ -60,10 +61,12 @@ export function budgetReportVariances(budget: BudgetSnapshot): EconomicGroup[] {
 }
 
 export function BudgetReportChart({
+    heading,
     kind,
     budget,
     width,
 }: {
+    heading: ReactNode;
     kind: BudgetReportChartKind;
     budget: BudgetSnapshot;
     width: number;
@@ -81,13 +84,16 @@ export function BudgetReportChart({
               );
     if (!rows.length)
         return (
-            <p>
-                Nessuna voce{' '}
-                {kind === 'variances'
-                    ? 'con scostamento diverso da zero'
-                    : 'inclusa'}{' '}
-                nel report.
-            </p>
+            <div className="budget-report-block">
+                {heading}
+                <p>
+                    Nessuna voce{' '}
+                    {kind === 'variances'
+                        ? 'con scostamento diverso da zero'
+                        : 'inclusa'}{' '}
+                    nel report.
+                </p>
+            </div>
         );
     const metrics =
         kind === 'variances'
@@ -105,11 +111,6 @@ export function BudgetReportChart({
     // Small chart batches remain intact on an A4 page; the table carries full labels and exact amounts.
     return (
         <>
-            <p className="budget-report-note">
-                {kind === 'variances'
-                    ? 'Fino a 5 maggiori sforamenti e 5 maggiori risparmi, come nella panoramica.'
-                    : 'Prime 10 voci per effettivo; le restanti sono aggregate in «Altri», come nella panoramica.'}
-            </p>
             {Array.from({ length: Math.ceil(rows.length / 6) }, (_, page) => {
                 const batch = rows.slice(page * 6, page * 6 + 6);
                 const data = batch.map((row, index) => ({
@@ -122,13 +123,23 @@ export function BudgetReportChart({
                 }));
                 return (
                     <div className="budget-report-chart-batch" key={page}>
-                        <p className="budget-report-note">
-                            {kind === 'variances'
-                                ? 'Scostamento'
-                                : 'Allocato (blu) · Effettivo (ocra)'}{' '}
-                            · voci {page * 6 + 1}–{page * 6 + batch.length}
-                        </p>
                         <div className="budget-report-block">
+                            {page === 0 && (
+                                <>
+                                    {heading}
+                                    <p className="budget-report-note">
+                                        {kind === 'variances'
+                                            ? 'Fino a 5 maggiori sforamenti e 5 maggiori risparmi, come nella panoramica.'
+                                            : 'Prime 10 voci per effettivo; le restanti sono aggregate in «Altri», come nella panoramica.'}
+                                    </p>
+                                </>
+                            )}
+                            <p className="budget-report-note">
+                                {kind === 'variances'
+                                    ? 'Scostamento'
+                                    : 'Allocato (blu) · Effettivo (ocra)'}{' '}
+                                · voci {page * 6 + 1}–{page * 6 + batch.length}
+                            </p>
                             <BarChart
                                 width={width}
                                 height={batch.length * 30 + 40}

@@ -537,6 +537,7 @@
     margin-bottom: 3mm;
     font-size: 9pt;
     font-weight: 600;
+    break-after: avoid;
 }
 .budget-report-header {
     display: flex;
@@ -888,6 +889,7 @@
     }
     .budget-report thead {
         display: table-header-group;
+        break-inside: avoid;
     }
     .budget-report tr {
         break-inside: avoid;

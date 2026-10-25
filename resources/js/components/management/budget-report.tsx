@@ -185,25 +185,36 @@ export function BudgetReport({
               },
           ];
     const renderBlock = (block: BudgetReportBlock) => {
+        const Icon = budgetReportIcons[block];
+        const heading = (
+            <h2>
+                <Icon aria-hidden="true" />
+                {options.titles[block]}
+            </h2>
+        );
         switch (block) {
             case 'kpis':
             case 'totals':
                 return (
-                    <div
-                        className={
-                            block === 'totals'
-                                ? 'budget-report-totals'
-                                : undefined
-                        }
-                    >
-                        <ReportTotals totals={budget.totals} />
-                    </div>
+                    <>
+                        {heading}
+                        <div
+                            className={
+                                block === 'totals'
+                                    ? 'budget-report-totals'
+                                    : undefined
+                            }
+                        >
+                            <ReportTotals totals={budget.totals} />
+                        </div>
+                    </>
                 );
             case 'sankey':
                 return (
                     <>
-                        {flowMetrics.map((metric) => (
+                        {flowMetrics.map((metric, index) => (
                             <div key={metric} className="budget-report-block">
+                                {index === 0 && heading}
                                 <h3>{budgetReportColumns[metric]}</h3>
                                 <BudgetSankey
                                     budget={budget}
@@ -222,8 +233,9 @@ export function BudgetReport({
             case 'reconciliation':
                 return (
                     <>
-                        {reconciliationMetrics.map((metric) => (
+                        {reconciliationMetrics.map((metric, index) => (
                             <div key={metric} className="budget-report-block">
+                                {index === 0 && heading}
                                 <h3>{budgetReportColumns[metric]}</h3>
                                 <table className="budget-report-distribution">
                                     <thead>
@@ -276,13 +288,20 @@ export function BudgetReport({
                 );
             case 'table':
                 return budget.entries.length === 0 ? (
-                    <p>Nessuna voce corrisponde ai filtri selezionati.</p>
+                    <div className="budget-report-block">
+                        {heading}
+                        <p>Nessuna voce corrisponde ai filtri selezionati.</p>
+                    </div>
                 ) : (
                     <>
                         {groups
                             .filter((group) => group.entries.length > 0)
-                            .map((group) => (
-                                <div key={group.id}>
+                            .map((group, index) => (
+                                <div
+                                    key={group.id}
+                                    className="budget-report-block budget-report-entry-group"
+                                >
+                                    {index === 0 && heading}
                                     {group.name && (
                                         <h3 className="budget-report-group-title">
                                             {group.name}
@@ -352,6 +371,7 @@ export function BudgetReport({
             default:
                 return (
                     <BudgetReportChart
+                        heading={heading}
                         kind={block}
                         budget={budget}
                         width={width}
@@ -381,7 +401,6 @@ export function BudgetReport({
             {options.blocks
                 .filter((block) => !options.hiddenBlocks.includes(block))
                 .map((block) => {
-                    const Icon = budgetReportIcons[block];
                     return (
                         <section
                             key={block}
@@ -393,10 +412,6 @@ export function BudgetReport({
                                     : undefined
                             }
                         >
-                            <h2>
-                                <Icon aria-hidden="true" />
-                                {options.titles[block]}
-                            </h2>
                             {renderBlock(block)}
                         </section>
                     );

@@ -34,8 +34,10 @@ const remove = vi.fn();
 const removeFooter = vi.fn();
 const decode = vi.fn();
 const queryFooter = vi.fn();
+const queryGroups = vi.fn();
 const element = {
-    querySelectorAll: () => [{ decode }],
+    querySelectorAll: (selector: string) =>
+        selector === 'img' ? [{ decode }] : queryGroups(),
     querySelector: queryFooter,
     cloneNode: () => ({ dataset: {}, append: vi.fn() }),
 } as unknown as HTMLElement;
@@ -44,6 +46,7 @@ beforeEach(() => {
     vi.resetAllMocks();
     vi.stubGlobal('document', { fonts: { ready: Promise.resolve() } });
     queryFooter.mockReturnValue({ cloneNode: () => ({}) });
+    queryGroups.mockReturnValue([]);
     factory.mockReturnValueOnce(body).mockReturnValueOnce(footerWorker);
     for (const worker of [body, footerWorker]) {
         worker.set.mockReturnValue(worker);
@@ -70,6 +73,47 @@ beforeEach(() => {
     documentPdf.internal.pageSize.getHeight.mockReturnValue(210);
 });
 afterEach(() => vi.unstubAllGlobals());
+
+it.each([
+    ['portrait', 942],
+    ['landscape', 613],
+] as const)(
+    'starts only oversized table groups on a new %s page',
+    async (orientation, oversizedHeight) => {
+        queryGroups.mockReturnValue([
+            { getBoundingClientRect: () => ({ height: oversizedHeight - 1 }) },
+            {
+                getBoundingClientRect: () => ({
+                    height: oversizedHeight - 0.5,
+                }),
+            },
+            { getBoundingClientRect: () => ({ height: 1500 }) },
+        ]);
+        await downloadBudgetPdf(element, 'Budget.pdf', {
+            ...defaultBudgetReportOptions('Test'),
+            orientation,
+        });
+        expect(body.set).toHaveBeenCalledWith(
+            expect.objectContaining({
+                pagebreak: {
+                    mode: ['css'],
+                    avoid: ['thead', 'tr', 'svg', 'img'],
+                    before: [
+                        '.budget-report-entry-group:nth-child(2)',
+                        '.budget-report-entry-group:nth-child(3)',
+                    ],
+                },
+            }),
+        );
+        expect(footerWorker.set).toHaveBeenCalledWith(
+            expect.objectContaining({
+                pagebreak: expect.not.objectContaining({
+                    before: expect.anything(),
+                }),
+            }),
+        );
+    },
+);
 
 it('waits for the logo and adds the same footer to every page before downloading', async () => {
     let loaded!: () => void;

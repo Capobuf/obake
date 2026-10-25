@@ -276,6 +276,34 @@ it('shows only the unchanged message when totals stay the same', () => {
     expect(html).not.toContain('Variazione');
 });
 
+it('offers one confirmation when the destination is already in the Budget', () => {
+    const year = preview.years[0];
+    const html = renderPreview({
+        ...preview,
+        years: [
+            {
+                ...year,
+                direct_entries: [],
+                destination: 'present',
+                budget_after: {
+                    add: year.budget_after.add,
+                    link: year.budget_after.add,
+                },
+                difference: {
+                    add: year.difference.add,
+                    link: year.difference.add,
+                },
+            },
+        ],
+    });
+    expect(html).toContain('Conferma collegamento');
+    expect(html).toContain('anche questa spesa verrà conteggiata');
+    expect(html).toContain('600,00');
+    expect(html).toContain('+500,00');
+    expect(html).not.toContain('Collega e aggiungi al Budget');
+    expect(html).not.toContain('Collega senza aggiungere');
+});
+
 it('disables only the unavailable choice with its explanation', () => {
     const html = renderPreview({
         ...preview,

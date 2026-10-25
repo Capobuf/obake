@@ -58,6 +58,115 @@ class BudgetReassignmentTest extends TestCase
         return [['project', 'add'], ['project', 'link'], ['contract', 'add'], ['contract', 'link']];
     }
 
+    public static function transfers(): iterable
+    {
+        foreach (['contract', 'project'] as $sourceType) {
+            foreach (['contract', 'project'] as $targetType) {
+                foreach ([[true, false, 'add'], [true, false, 'link'], [false, true, 'link'], [true, true, 'link'], [false, false, 'link']] as [$included, $present, $choice]) {
+                    yield "$sourceType-$targetType-$included-$present-$choice" => [$sourceType, $targetType, $included, $present, $choice];
+                }
+            }
+        }
+    }
+
+    #[DataProvider('transfers')]
+    public function test_container_transfers_preview_only_inclusion_changes_and_preserve_source(string $sourceType, string $targetType, bool $included, bool $present, string $choice): void
+    {
+        [$expense, $target, $year, $direct] = $this->fixture($targetType, $present);
+        $direct->delete();
+        $source = $this->tenant->{$sourceType.'s'}()->create(['name' => 'Partenza', 'year' => 2026]);
+        $expense->update([$sourceType.'_id' => $source->id]);
+        if ($included) {
+            $year->entries()->create(['tenant_id' => $this->tenant->id, 'type' => $sourceType, $sourceType.'_id' => $source->id]);
+        }
+        $this->tenant->expenses()->create(['title' => 'Resta alla partenza', 'year' => 2026, $sourceType.'_id' => $source->id, 'allocated_amount' => '10.04', 'actual_amount' => '99.99']);
+        $this->tenant->expenses()->create(['title' => 'Già alla destinazione', 'year' => 2026, $targetType.'_id' => $target->id, 'allocated_amount' => '500.00']);
+        $before = app(UndoHistory::class)->snapshot($this->tenant);
+        $data = ['contract_id' => null, 'project_id' => null, $targetType.'_id' => $target->id];
+        if ($included === $present) {
+            $this->patchJson('/t/alfa/expenses/'.$expense->id, $data)->assertOk();
+        } else {
+            $this->patchJson('/t/alfa/expenses/'.$expense->id, $data)->assertUnprocessable()->assertJsonPath('code', 'budget_reassignment_required');
+            $preview = $this->patchJson($this->url($expense).'/preview', $data)->assertOk()->assertJsonPath('valid', true)->assertJsonPath('automatic', false)
+                ->assertJsonPath('years.0.difference.link.allocated', $included ? '-90.01' : '90.01')
+                ->assertJsonPath('years.0.difference.link.actual', '0.00');
+            if (! $present) {
+                $preview->assertJsonPath('years.0.difference.add.allocated', '500.00');
+            }
+            $this->assertEquals($before, app(UndoHistory::class)->snapshot($this->tenant));
+            $this->patchJson($this->url($expense), [...$data, 'token' => $preview->json('token'), 'confirmed' => true, 'choice' => $choice])->assertOk();
+            $this->assertSame($preview->json('years.0.budget_after.'.$choice), app(AnnualBudget::class)->snapshot($this->tenant, $year->fresh())['totals']);
+        }
+        $after = app(UndoHistory::class)->snapshot($this->tenant);
+        foreach (['expense_lines', 'attachments', 'cost_center_expense'] as $table) {
+            $this->assertEquals($before[$table], $after[$table]);
+        }
+        $this->assertSame($target->id, $expense->fresh()->getAttribute($targetType.'_id'));
+        $this->assertSame($included ? 1 : 0, $year->entries()->where($sourceType.'_id', $source->id)->count());
+        $this->assertEmpty($year->fresh()->dismissed_sources);
+        $undo = $this->postJson('/t/alfa/undo')->assertOk()->json('action_id');
+        $this->assertEquals($before, app(UndoHistory::class)->snapshot($this->tenant));
+        $this->postJson('/t/alfa/undo/restore', ['action_id' => $undo])->assertOk();
+        $this->assertEquals($after, app(UndoHistory::class)->snapshot($this->tenant));
+    }
+
+    public function test_container_transfer_batch_is_atomic_and_stale_preview_is_rejected(): void
+    {
+        [$expense, $target, $year, $entry] = $this->fixture('contract');
+        $source = $this->tenant->contracts()->create(['name' => 'Partenza', 'year' => 2026]);
+        $entry->update(['type' => 'contract', 'expense_id' => null, 'contract_id' => $source->id]);
+        $expense->update(['contract_id' => $source->id]);
+        $other = $this->tenant->expenses()->create(['title' => 'Invariata', 'year' => 2026]);
+        $before = app(UndoHistory::class)->snapshot($this->tenant);
+        $data = ['contract_id' => $target->id];
+        $this->patchJson('/t/alfa/expenses/batch', ['updates' => [
+            ['id' => $other->id, 'title' => 'Non salvata'], ['id' => $expense->id, ...$data],
+        ]])->assertUnprocessable()->assertJsonValidationErrors('updates.1.budget');
+        $this->assertEquals($before, app(UndoHistory::class)->snapshot($this->tenant));
+        $preview = $this->patchJson($this->url($expense).'/preview', $data)->assertOk();
+        $this->tenant->expenses()->create(['title' => 'Sopraggiunta', 'year' => 2026, 'contract_id' => $source->id, 'actual_amount' => '1.00']);
+        $before = app(UndoHistory::class)->snapshot($this->tenant);
+        $this->patchJson($this->url($expense), [...$data, 'token' => $preview->json('token'), 'confirmed' => true, 'choice' => 'add'])->assertConflict();
+        $this->assertEquals($before, app(UndoHistory::class)->snapshot($this->tenant));
+    }
+
+    public function test_transfer_between_years_previews_each_budget_separately(): void
+    {
+        $source = $this->tenant->contracts()->create(['name' => '2026', 'year' => 2026]);
+        $target = $this->tenant->projects()->create(['name' => '2027', 'year' => 2027]);
+        $expense = $this->tenant->expenses()->create(['title' => 'Da spostare', 'year' => 2026, 'contract_id' => $source->id, 'allocated_amount' => '100.05', 'actual_amount' => '99.99']);
+        $years = [];
+        foreach ([2026 => ['contract', $source], 2027 => ['project', $target]] as $number => [$type, $container]) {
+            $years[$number] = $this->tenant->budgetYears()->create(['year' => $number]);
+            $years[$number]->entries()->create(['tenant_id' => $this->tenant->id, 'type' => $type, $type.'_id' => $container->id]);
+            $this->tenant->expenses()->create(['title' => 'Resta', 'year' => $number, $type.'_id' => $container->id, 'allocated_amount' => '500.00', 'actual_amount' => '200.00']);
+        }
+        $data = ['contract_id' => null, 'project_id' => $target->id, 'year' => 2027];
+        $this->patchJson('/t/alfa/expenses/'.$expense->id, $data)->assertUnprocessable()->assertJsonPath('code', 'budget_reassignment_required');
+        $preview = $this->patchJson($this->url($expense).'/preview', $data)->assertOk()->assertJsonPath('valid', true)
+            ->assertJsonPath('years.0.year', 2026)->assertJsonPath('years.0.difference.link.allocated', '-100.05')->assertJsonPath('years.0.difference.link.actual', '-99.99')
+            ->assertJsonPath('years.1.year', 2027)->assertJsonPath('years.1.difference.link.allocated', '100.05')->assertJsonPath('years.1.difference.link.actual', '99.99');
+        $this->patchJson($this->url($expense), [...$data, 'token' => $preview->json('token'), 'confirmed' => true, 'choice' => 'link'])->assertOk();
+        foreach ([2026, 2027] as $index => $number) {
+            $this->assertSame($preview->json("years.$index.budget_after.link"), app(AnnualBudget::class)->snapshot($this->tenant, $years[$number])['totals']);
+        }
+        $this->assertDatabaseCount('budget_entries', 2);
+    }
+
+    public function test_unrelated_years_and_unchanged_links_do_not_require_confirmation(): void
+    {
+        [$expense, $target, $year, $entry] = $this->fixture('contract');
+        $source = $this->tenant->contracts()->create(['name' => 'Partenza', 'year' => 2026]);
+        $entry->update(['type' => 'contract', 'expense_id' => null, 'contract_id' => $source->id]);
+        $expense->update(['contract_id' => $source->id]);
+        $this->patchJson('/t/alfa/expenses/'.$expense->id, ['contract_id' => (string) $source->id, 'notes' => 'Aggiornate'])->assertOk();
+        $expense->lines()->update(['year' => 2027]);
+        $expense->update(['year' => 2027]);
+        $this->patchJson('/t/alfa/expenses/'.$expense->id, ['contract_id' => $target->id])->assertOk();
+        $this->assertSame($target->id, $expense->fresh()->contract_id);
+        $this->assertSame($source->id, $entry->fresh()->contract_id);
+    }
+
     #[DataProvider('states')]
     public function test_both_choices_are_read_only_and_match_committed_totals(string $type, string $choice): void
     {

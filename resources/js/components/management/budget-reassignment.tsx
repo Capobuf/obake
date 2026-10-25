@@ -67,7 +67,7 @@ export class BudgetReassignmentRequired extends Error {
         public data: Record<string, unknown>,
         public afterSaved?: () => void,
     ) {
-        super('Questa spesa è già nel Budget.');
+        super('Il collegamento cambia l’inclusione della spesa nel Budget.');
     }
 }
 
@@ -154,6 +154,10 @@ export function BudgetReassignmentComparison({
 }) {
     const targetLabel =
         preview.target.type === 'contract' ? 'Contratto' : 'Progetto';
+    const missingTarget = preview.years.some(
+        (year) => year.budget_id !== null && year.destination === 'missing',
+    );
+    const choices: BudgetChoice[] = missingTarget ? ['add', 'link'] : ['link'];
     const detailYears = preview.years.filter((year) =>
         metrics.some(
             ([key]) =>
@@ -168,8 +172,13 @@ export function BudgetReassignmentComparison({
                 {targetLabel.toLowerCase()}{' '}
                 <strong>{preview.target.name}</strong>
             </p>
-            <div className="grid items-stretch gap-4 sm:grid-cols-2">
-                {(['add', 'link'] as const).map((choice) => (
+            <div
+                className={cn(
+                    'grid items-stretch gap-4',
+                    missingTarget && 'sm:grid-cols-2',
+                )}
+            >
+                {choices.map((choice) => (
                     <Card
                         key={choice}
                         className="gap-4 py-4"
@@ -183,12 +192,16 @@ export function BudgetReassignmentComparison({
                             <CardTitle>
                                 {choice === 'add'
                                     ? 'Aggiungi anche al Budget'
-                                    : 'Collega soltanto'}
+                                    : missingTarget
+                                      ? 'Collega soltanto'
+                                      : 'Collega al contenitore nel Budget'}
                             </CardTitle>
                             <CardDescription>
                                 {choice === 'add'
                                     ? `Entrano nel Budget anche le altre spese del ${targetLabel.toLowerCase()} per l’anno.`
-                                    : 'La spesa viene collegata, ma non conta nei Budget in cui questo è assente.'}
+                                    : missingTarget
+                                      ? 'La spesa viene collegata, ma non conta nei Budget in cui questo è assente.'
+                                      : 'Il contenitore è già nel Budget: anche questa spesa verrà conteggiata per l’anno.'}
                             </CardDescription>
                         </CardHeader>
                         <CardContent className="flex flex-col gap-4 px-4">
@@ -285,7 +298,9 @@ export function BudgetReassignmentComparison({
                             >
                                 {choice === 'add'
                                     ? 'Collega e aggiungi al Budget'
-                                    : 'Collega senza aggiungere'}
+                                    : missingTarget
+                                      ? 'Collega senza aggiungere'
+                                      : 'Conferma collegamento'}
                             </Button>
                         </CardFooter>
                     </Card>
@@ -439,8 +454,9 @@ export function BudgetReassignment({
                 <DialogHeader className="shrink-0 px-6 pt-6 pb-4 text-left">
                     <DialogTitle>Come vuoi collegare questa spesa?</DialogTitle>
                     <DialogDescription>
-                        Scegli se aggiungere anche il contratto o progetto al
-                        Budget. La spesa non viene eliminata.
+                        Verifica l’effetto del collegamento sul Budget prima di
+                        confermare. La spesa e il contenitore di partenza non
+                        vengono eliminati.
                     </DialogDescription>
                 </DialogHeader>
                 <div className="flex min-h-0 flex-col gap-4 overflow-y-auto px-6 pb-4">

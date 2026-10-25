@@ -1,12 +1,9 @@
 import { router } from '@inertiajs/react';
-import { Plus, Search, X } from 'lucide-react';
+import { Plus, X } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
-import {
-    InputGroup,
-    InputGroupInput,
-    InputGroupAddon,
-} from '@/components/ui/input-group';
+import { TableSearchInput } from './table-search-input';
+import { useTableSearch } from '@/hooks/use-table-search';
 import { TableFilters } from './table-view';
 import { Field, FieldGroup, FieldLabel } from '@/components/ui/field';
 
@@ -50,6 +47,12 @@ export function DashboardFilters({
     contractMode?: boolean;
 }) {
     const [draft, setDraft] = useState(filters);
+    const [previousFilters, setPreviousFilters] = useState(filters);
+    if (previousFilters !== filters) {
+        setPreviousFilters(filters);
+        setDraft(filters);
+    }
+    const [search, changeSearch] = useTableSearch(path, filters);
     const year = filters.year;
     const secondaryFilters = [
         {
@@ -92,29 +95,9 @@ export function DashboardFilters({
                     className="flex flex-col gap-4"
                     onSubmit={(event) => {
                         event.preventDefault();
-                        applyFilters(path, draft);
+                        applyFilters(path, { ...draft, search });
                     }}
                 >
-                    <InputGroup className="min-w-0">
-                        <InputGroupInput
-                            aria-label="Cerca spese per descrizione"
-                            placeholder="Cerca una spesa…"
-                            value={draft.search ?? ''}
-                            disabled={busy}
-                            onChange={(event) =>
-                                setDraft({
-                                    ...draft,
-                                    search: event.target.value,
-                                })
-                            }
-                        />
-                        <InputGroupAddon>
-                            <Search aria-hidden="true" />
-                        </InputGroupAddon>
-                    </InputGroup>
-                    <Button type="submit" variant="outline" disabled={busy}>
-                        Cerca
-                    </Button>
                     <FieldGroup>
                         {relationFilters.map(
                             ({ catalog, field, label, all, relation }) => (
@@ -223,13 +206,18 @@ export function DashboardFilters({
                         className="w-full"
                         disabled={busy}
                         onClick={() => {
-                            applyFilters(path, draft);
+                            applyFilters(path, { ...draft, search });
                         }}
                     >
                         Applica filtri
                     </Button>
                 </form>
             </TableFilters>
+            <TableSearchInput
+                value={search}
+                onChange={changeSearch}
+                disabled={busy}
+            />
             {(activeFilters > 0 || filters.search) && (
                 <Button
                     type="button"

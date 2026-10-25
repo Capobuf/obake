@@ -10,7 +10,6 @@ import {
     Plus,
     Ellipsis,
     ArrowUpRight,
-    Search,
     FileText,
     FolderKanban,
     Handshake,
@@ -44,11 +43,8 @@ import type {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import {
-    InputGroup,
-    InputGroupInput,
-    InputGroupAddon,
-} from '@/components/ui/input-group';
+import { TableSearchInput } from '@/components/management/table-search-input';
+import { useTableSearch } from '@/hooks/use-table-search';
 import {
     DropdownMenu,
     DropdownMenuTrigger,
@@ -96,8 +92,8 @@ export default function CatalogPage({
     'use no memo'; // TanStack v8 exposes mutable table and column instances.
 
     const [deleting, setDeleting] = useState<RecordData | null>(null);
-    const [search, setSearch] = useState(filters.search ?? '');
     const path = `/t/${tenant.slug}/${catalog}`;
+    const [search, changeSearch] = useTableSearch(path, filters);
     const view = useTableView<RecordData>({
         rows: records.data,
         storageKey: `mp3:table:v1:${tenant.slug}:${catalog}`,
@@ -209,32 +205,7 @@ export default function CatalogPage({
                                 count={activeFilterCount}
                                 disabled={deleting !== null}
                             >
-                                <form
-                                    className="flex flex-col gap-3"
-                                    onSubmit={(event) => {
-                                        event.preventDefault();
-                                        applyFilters(path, {
-                                            ...filters,
-                                            search,
-                                        });
-                                    }}
-                                >
-                                    <InputGroup className="min-w-0">
-                                        <InputGroupInput
-                                            aria-label="Cerca per nome"
-                                            placeholder="Cerca per nome…"
-                                            value={search}
-                                            onChange={(event) =>
-                                                setSearch(event.target.value)
-                                            }
-                                        />
-                                        <InputGroupAddon>
-                                            <Search aria-hidden="true" />
-                                        </InputGroupAddon>
-                                    </InputGroup>
-                                    <Button type="submit" variant="outline">
-                                        Cerca
-                                    </Button>
+                                <div className="flex flex-col gap-3">
                                     <Select
                                         value={filters.direction ?? 'asc'}
                                         onValueChange={(direction) =>
@@ -370,14 +341,18 @@ export default function CatalogPage({
                                         type="button"
                                         variant="ghost"
                                         onClick={() => {
-                                            setSearch('');
                                             applyFilters(path, {});
                                         }}
                                     >
                                         Azzera
                                     </Button>
-                                </form>
+                                </div>
                             </TableFilters>
+                            <TableSearchInput
+                                value={search}
+                                onChange={changeSearch}
+                                disabled={deleting !== null}
+                            />
                             <Button
                                 type="button"
                                 className="w-full sm:ml-auto sm:w-auto"
@@ -392,7 +367,9 @@ export default function CatalogPage({
                             <Empty className="border">
                                 <EmptyHeader>
                                     <EmptyTitle>
-                                        Nessun {singular[catalog]} trovato
+                                        {filters.search
+                                            ? 'Nessun risultato per la ricerca'
+                                            : `Nessun ${singular[catalog]} trovato`}
                                     </EmptyTitle>
                                     <EmptyDescription>
                                         Modifica la ricerca oppure aggiungi il

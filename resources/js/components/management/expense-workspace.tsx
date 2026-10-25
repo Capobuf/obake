@@ -40,7 +40,7 @@ export function ExpenseWorkspace({
                 toolbar={
                     showFilters ? (
                         <DashboardFilters
-                            key={JSON.stringify(filters)}
+                            key={`${path}:${filters.year}:${filters.history}`}
                             tenant={tenant}
                             expenses={expenses}
                             filters={filters}

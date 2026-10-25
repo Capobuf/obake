@@ -9,7 +9,6 @@ import { CornerDownRight, Plus, Ellipsis, Tags } from 'lucide-react';
 import { useState } from 'react';
 import {
     useTableView,
-    TableFilters,
     TableViewCells,
     TableViewHeader,
 } from '@/components/management/table-view';
@@ -35,7 +34,8 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Field, FieldLabel, FieldDescription } from '@/components/ui/field';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Input } from '@/components/ui/input';
+import { TableSearchInput } from '@/components/management/table-search-input';
+import { useTableSearch } from '@/hooks/use-table-search';
 import { Table, TableBody, TableCell, TableRow } from '@/components/ui/table';
 import {
     DropdownMenu,
@@ -65,12 +65,12 @@ export default function CostCenters({
 }) {
     'use no memo'; // TanStack v8 exposes mutable table and column instances.
 
-    const [search, setSearch] = useState(filters.search ?? '');
     const [deleting, setDeleting] = useState<CostCenter | null>(null);
     const [deleteChildren, setDeleteChildren] = useState(false);
     const [confirmCascade, setConfirmCascade] = useState(false);
     const [busy, setBusy] = useState(false);
     const path = `/t/${tenant.slug}/cost-centers`;
+    const [search, changeSearch] = useTableSearch(path, filters);
     const hasChildren = !!deleting?.children?.length;
     async function remove() {
         if (!deleting || busy) return;
@@ -266,61 +266,11 @@ export default function CostCenters({
                 <Card>
                     <CardContent className="flex min-w-0 flex-col gap-4">
                         <div className="flex flex-wrap items-center gap-2">
-                            <TableFilters
-                                title="Filtri centri di costo"
-                                count={filters.search ? 1 : 0}
+                            <TableSearchInput
+                                value={search}
+                                onChange={changeSearch}
                                 disabled={busy}
-                            >
-                                <form
-                                    className="flex flex-col gap-3"
-                                    onSubmit={(event) => {
-                                        event.preventDefault();
-                                        router.get(
-                                            path,
-                                            { ...filters, search },
-                                            {
-                                                preserveState: true,
-                                                preserveScroll: true,
-                                            },
-                                        );
-                                    }}
-                                >
-                                    <Input
-                                        aria-label="Cerca Centri di Costo"
-                                        placeholder="Cerca per nome…"
-                                        value={search}
-                                        onChange={(event) =>
-                                            setSearch(event.target.value)
-                                        }
-                                    />
-                                    <Button type="submit" variant="outline">
-                                        Cerca
-                                    </Button>
-                                </form>
-                                {filters.search && (
-                                    <Button
-                                        type="button"
-                                        variant="ghost"
-                                        onClick={() => {
-                                            setSearch('');
-                                            router.get(
-                                                path,
-                                                {
-                                                    sort: filters.sort,
-                                                    direction:
-                                                        filters.direction,
-                                                },
-                                                {
-                                                    preserveState: true,
-                                                    preserveScroll: true,
-                                                },
-                                            );
-                                        }}
-                                    >
-                                        Azzera filtri
-                                    </Button>
-                                )}
-                            </TableFilters>
+                            />
                             <Button
                                 type="button"
                                 className="w-full sm:ml-auto sm:w-auto"
@@ -371,7 +321,9 @@ export default function CostCenters({
                             <Empty>
                                 <EmptyHeader>
                                     <EmptyTitle>
-                                        Nessun Centro di Costo
+                                        {filters.search
+                                            ? 'Nessun risultato per la ricerca'
+                                            : 'Nessun Centro di Costo'}
                                     </EmptyTitle>
                                     <EmptyDescription>
                                         {filters.search

@@ -38,7 +38,7 @@ export default function Expenses(
                     year={props.filters.year!}
                 />
                 <ExpenseWorkspace
-                    key={JSON.stringify([props.tenant.slug, props.filters])}
+                    key={`${props.tenant.slug}:${props.filters.year}`}
                     {...props}
                     onBusyChange={setBusy}
                 />

@@ -139,7 +139,6 @@ export default function CatalogDetail({
                     key={`${tenant.id}:${catalog}:${record.id}:${year}:${history}`}
                     toolbar={
                         <DashboardFilters
-                            key={JSON.stringify(expenseFilters)}
                             tenant={tenant}
                             expenses={expenses}
                             filters={expenseFilters}

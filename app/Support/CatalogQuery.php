@@ -40,8 +40,40 @@ final class CatalogQuery
         if ($catalog === 'vendors' && $request->input('linked') === '1') {
             $query->whereHas('expenses');
         }
-        if ($search = $request->string('search')->trim()->toString()) {
-            $query->where('name', 'like', '%'.$search.'%');
+        $search = $request->string('search')->trim()->toString();
+        if ($search !== '') {
+            $pattern = TableSearch::pattern($search);
+            $amount = TableSearch::amount($search);
+            $expenses = ExpenseOverview::search(ExpenseOverview::economicQuery($tenant)
+                ->where('year', EconomicYearContext::year($tenant, $request)), $search);
+            $field = match ($catalog) {
+                'vendors' => 'vendor_id', 'contracts' => 'contract_id', 'projects' => 'project_id',
+            };
+            $query->where(function ($match) use ($catalog, $tenant, $pattern, $amount, $expenses, $field) {
+                $fields = match ($catalog) {
+                    'vendors' => ['name', 'notes', 'vat_number', 'email', 'phone'],
+                    'contracts' => ['name', 'notes'],
+                    'projects' => ['name', 'description', 'status'],
+                };
+                foreach ($fields as $column) {
+                    $match->orWhereRaw("LOWER($catalog.$column) LIKE ? ESCAPE '!'", [$pattern]);
+                }
+                if ($catalog !== 'vendors') {
+                    foreach (['costCenters', 'costCenters.parent'] as $relation) {
+                        $match->orWhereHas($relation, fn ($related) => $related->whereRaw("LOWER(name) LIKE ? ESCAPE '!'", [$pattern]));
+                    }
+                }
+                if ($catalog === 'projects') {
+                    $match->orWhereIn('status', $tenant->projectStatuses()->whereRaw("LOWER(name) LIKE ? ESCAPE '!'", [$pattern])->select('key'));
+                }
+                if ($catalog === 'contracts') {
+                    $match->orWhereHas('vendor', fn ($vendor) => $vendor->whereRaw("LOWER(name) LIKE ? ESCAPE '!'", [$pattern]));
+                    if ($amount !== null) {
+                        $match->orWhere('reference_amount', $amount);
+                    }
+                }
+                $match->orWhereIn($catalog.'.id', $expenses->select($field));
+            });
         }
 
         /** @var Builder<Vendor|Contract|Project> $builder */

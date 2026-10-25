@@ -294,6 +294,7 @@ it('defaults to all blocks and columns except Status, supports independent scope
 it('uses server vendor groups and all attributed source amounts for charts', () => {
     const vendorTotals = {
         ...totals,
+        name: 'Fornitore delle spese',
         allocated: '10.10',
         actual: '1.00',
         variance: '-9.10',
@@ -303,7 +304,10 @@ it('uses server vendor groups and all attributed source amounts for charts', () 
         ...summary,
         vendor_groups: { '8': vendorTotals },
         entries: [
-            { ...entries[0], vendor: { id: 8, name: 'Uno' } },
+            {
+                ...entries[0],
+                vendor: { id: 9, name: 'Fornitore del contenitore' },
+            },
             {
                 ...entries[1],
                 type: 'project' as const,
@@ -318,7 +322,7 @@ it('uses server vendor groups and all attributed source amounts for charts', () 
         ],
     };
     expect(budgetReportGroups(snapshot, 'vendors')).toEqual([
-        { ...vendorTotals, id: '8', name: 'Uno' },
+        { ...vendorTotals, id: '8' },
     ]);
     expect(budgetReportGroups(snapshot, 'projects')).toHaveLength(2);
     expect(budgetReportGroups(snapshot, 'projects')[0]).toMatchObject({
@@ -421,7 +425,12 @@ it('keeps known allocated amounts in the supplier bar chart when all actuals are
     const budget = {
         ...summary,
         vendor_groups: {
-            none: { ...totals, allocated: '63296.44', actual: null },
+            none: {
+                ...totals,
+                name: 'Senza fornitore',
+                allocated: '63296.44',
+                actual: null,
+            },
         },
     };
     const html = renderToStaticMarkup(
@@ -447,6 +456,7 @@ it('keeps known allocated amounts in the supplier bar chart when all actuals are
                     vendor_groups: {
                         none: {
                             ...totals,
+                            name: 'Senza fornitore',
                             allocated: '63296.44',
                             actual: '0.00',
                         },

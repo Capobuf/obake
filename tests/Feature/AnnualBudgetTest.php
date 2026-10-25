@@ -273,6 +273,71 @@ class AnnualBudgetTest extends TestCase
         $this->getJson($this->url('').'?entry_ids='.$state['entries'][1]['id'])->assertOk()->assertJsonPath('budget.totals.variance', '-100.00');
     }
 
+    public function test_vendor_distribution_uses_only_expenses_attributed_to_selected_entries(): void
+    {
+        $vendorA = $this->tenant->vendors()->create(['name' => 'Contenitore e spesa A']);
+        $vendorB = $this->tenant->vendors()->create(['name' => 'Solo spese B']);
+        $unused = $this->tenant->vendors()->create(['name' => 'Solo contenitore vuoto']);
+        $project = $this->tenant->projects()->create(['year' => 2026, 'name' => 'Due fornitori']);
+        $contract = $this->tenant->contracts()->create(['year' => 2026, 'name' => 'Contratto A', 'vendor_id' => $vendorA->id]);
+        $empty = $this->tenant->contracts()->create(['year' => 2026, 'name' => 'Vuoto', 'vendor_id' => $unused->id]);
+        foreach ([
+            ['project_id' => $project->id, 'vendor_id' => $vendorA->id, 'allocated_amount' => '100', 'actual_amount' => '80'],
+            ['project_id' => $project->id, 'vendor_id' => $vendorB->id, 'allocated_amount' => '200', 'actual_amount' => '150'],
+            ['contract_id' => $contract->id, 'vendor_id' => $vendorB->id, 'allocated_amount' => '300', 'actual_amount' => '250'],
+            ['contract_id' => $contract->id, 'allocated_amount' => '50', 'actual_amount' => '60'],
+            ['contract_id' => $contract->id, 'vendor_id' => $vendorB->id, 'allocated_amount' => '-20', 'actual_amount' => '0'],
+            ['contract_id' => $contract->id, 'vendor_id' => $vendorB->id],
+            ['vendor_id' => $vendorB->id, 'allocated_amount' => '9999', 'actual_amount' => '9999'],
+        ] as $index => $data) {
+            $this->tenant->expenses()->create(['title' => 'Spesa '.$index, 'year' => 2026, ...$data]);
+        }
+        $this->add('project', $project->id);
+        $this->add('contract', $contract->id);
+        $state = $this->add('contract', $empty->id);
+        $this->assertSame('630.00', $state['totals']['allocated']);
+        $this->assertSame('540.00', $state['totals']['actual']);
+        $this->assertSame($vendorA->id, $state['entries'][1]['vendor']['id']);
+        $this->assertNull($state['entries'][0]['vendor']);
+        $this->assertSame('100.00', $state['vendor_groups'][$vendorA->id]['allocated']);
+        $this->assertSame('80.00', $state['vendor_groups'][$vendorA->id]['actual']);
+        $this->assertSame('Solo spese B', $state['vendor_groups'][$vendorB->id]['name']);
+        $this->assertSame('480.00', $state['vendor_groups'][$vendorB->id]['allocated']);
+        $this->assertSame('400.00', $state['vendor_groups'][$vendorB->id]['actual']);
+        $this->assertSame('500.00', $state['vendor_groups'][$vendorB->id]['allocated_positive']);
+        $this->assertSame('-20.00', $state['vendor_groups'][$vendorB->id]['allocated_negative']);
+        $this->assertSame(4, $state['vendor_groups'][$vendorB->id]['count']);
+        $this->assertSame('Senza fornitore', $state['vendor_groups']['none']['name']);
+        $this->assertSame('50.00', $state['vendor_groups']['none']['allocated']);
+        $this->assertSame('60.00', $state['vendor_groups']['none']['actual']);
+        $this->assertArrayNotHasKey($unused->id, $state['vendor_groups']);
+
+        $this->getJson($this->url('').'?entry_ids='.$state['entries'][0]['id'])->assertOk()
+            ->assertJsonPath('budget.totals.allocated', '300.00')
+            ->assertJsonPath('budget.vendor_groups.'.$vendorA->id.'.allocated', '100.00')
+            ->assertJsonPath('budget.vendor_groups.'.$vendorB->id.'.allocated', '200.00')
+            ->assertJsonPath('budget.vendor_groups.'.$vendorB->id.'.actual', '150.00')
+            ->assertJsonMissingPath('budget.vendor_groups.none');
+        $this->getJson($this->url('').'?entry_ids='.$state['entries'][2]['id'])->assertOk()
+            ->assertJsonCount(0, 'budget.vendor_groups');
+    }
+
+    public function test_vendor_distribution_uses_the_economic_year_of_expense_lines(): void
+    {
+        $vendor = $this->tenant->vendors()->create(['name' => 'Due anni']);
+        $expense = $this->tenant->expenses()->create(['title' => 'Pluriennale', 'year' => 2026, 'vendor_id' => $vendor->id]);
+        foreach ([2026 => '100', 2027 => '200'] as $year => $amount) {
+            $expense->lines()->create(['year' => $year, 'position' => $year - 2026, 'type' => 'allocated', 'description' => 'Quota', 'unit_price' => $amount, 'quantity' => '1', 'total' => $amount]);
+        }
+        $next = $this->tenant->budgetYears()->create(['year' => 2027]);
+        $next->entries()->create(['tenant_id' => $this->tenant->id, 'type' => 'expense', 'expense_id' => $expense->id]);
+        $state = $this->add('expense', $expense->id);
+        $this->assertSame('100.00', $state['vendor_groups'][$vendor->id]['allocated']);
+        $this->assertNull($state['vendor_groups'][$vendor->id]['actual']);
+        $this->assertSame(1, $state['vendor_groups'][$vendor->id]['estimated_count']);
+        $this->assertSame('200.00', app(AnnualBudget::class)->snapshot($this->tenant, $next)['vendor_groups'][$vendor->id]['allocated']);
+    }
+
     public function test_report_snapshot_preserves_empty_removed_zero_and_foreign_selections(): void
     {
         $vendor = $this->tenant->vendors()->create(['name' => 'Report vendor']);
@@ -435,6 +500,11 @@ class AnnualBudgetTest extends TestCase
         $this->assertNotEmpty($state['warnings']);
         $this->assertFalse($state['entries'][1]['expenses'][0]['contributes']);
         $this->assertSame('Contratto', $state['entries'][1]['expenses'][0]['counted_in']);
+        $this->assertSame(1, $state['vendor_groups']['none']['count']);
+        $this->assertSame('100.00', $state['vendor_groups']['none']['allocated']);
+        $this->assertSame('80.00', $state['vendor_groups']['none']['actual']);
+        $this->getJson($this->url('').'?entry_ids='.$state['entries'][1]['id'])->assertOk()
+            ->assertJsonCount(0, 'budget.vendor_groups');
         $this->patchJson($this->url(), ['action' => 'remove', 'ids' => [$state['entries'][2]['id']]])->assertOk()->assertJsonPath('reassigned.0', $expense->id)->assertJsonPath('budget.groups.project.allocated', '100.00');
         $this->patchJson($this->url(), ['action' => 'remove', 'ids' => [$state['entries'][1]['id']]])->assertOk()->assertJsonPath('budget.groups.expense.allocated', '100.00');
         $this->patchJson($this->url(), ['action' => 'reactivate', 'ids' => [$state['entries'][2]['id']]])->assertUnprocessable();

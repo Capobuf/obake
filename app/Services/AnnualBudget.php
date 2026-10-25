@@ -163,16 +163,23 @@ class AnnualBudget
             $groups[$type] = $this->totals(array_values(array_filter($rows, fn ($row) => $row['type'] === $type)));
         }
         $centers = [];
-        $vendors = [];
         foreach ($rows as $row) {
             $centers[(string) ($row['cost_center_id'] ?? 'none')][] = $row;
-            $vendors[(string) ($row['vendor']->id ?? 'none')][] = $row;
         }
+        $includedIds = array_column($rows, 'id');
+        $vendors = $expenses->filter(fn (Expense $expense) => in_array($owners[$expense->id] ?? null, $includedIds, true))
+            ->groupBy(fn (Expense $expense) => $expense->vendor_id ?? 'none')
+            ->map(fn ($group) => [
+                'name' => $group->first()->vendor->name ?? 'Senza fornitore',
+                ...$this->totals($group->map(fn (Expense $expense) => $this->values([
+                    ['allocated' => $expense->allocated_amount, 'actual' => $expense->actual_amount],
+                ]))->all()),
+            ])->all();
 
         return [
             'entries' => $rows, 'totals' => $this->totals($rows), 'groups' => $groups,
             'cost_center_groups' => array_map(fn ($group) => $this->totals($group), $centers),
-            'vendor_groups' => array_map(fn ($group) => $this->totals($group), $vendors),
+            'vendor_groups' => $vendors,
             'owners' => $owners, 'warnings' => $warnings,
             'has_missing_entries' => $expenses->contains(fn (Expense $expense) => ! isset($owners[$expense->id])),
         ];

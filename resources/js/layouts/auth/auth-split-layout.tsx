@@ -15,7 +15,7 @@ export default function AuthSplitLayout({
 
     return (
         <div className="grid min-h-svh items-center bg-card text-card-foreground lg:grid-cols-2">
-            <div
+            <aside
                 className="hidden self-stretch border-r bg-sidebar bg-cover bg-center p-10 text-sidebar-foreground lg:flex lg:flex-col"
                 style={{
                     backgroundImage: 'var(--auth-background)',
@@ -28,7 +28,7 @@ export default function AuthSplitLayout({
                     <AppLogoIcon className="size-10" />
                     {name}
                 </Link>
-            </div>
+            </aside>
             <main className="min-w-0 px-6 py-10 sm:px-8">
                 <div className="mx-auto flex w-full max-w-sm flex-col gap-6">
                     <Link

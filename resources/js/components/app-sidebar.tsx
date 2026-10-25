@@ -31,7 +31,12 @@ export function AppSidebar() {
           : 'La mia azienda';
 
     return (
-        <Sidebar collapsible="icon" variant="inset">
+        <Sidebar
+            collapsible="icon"
+            variant="inset"
+            role="navigation"
+            aria-label="Navigazione principale"
+        >
             <SidebarHeader className="gap-4 p-3 group-data-[collapsible=icon]:px-2">
                 <SidebarMenu>
                     <SidebarMenuItem>

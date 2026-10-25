@@ -2092,6 +2092,7 @@ export function BudgetTable({
                                                                                         asChild
                                                                                     >
                                                                                         <span
+                                                                                            role="img"
                                                                                             tabIndex={
                                                                                                 0
                                                                                             }

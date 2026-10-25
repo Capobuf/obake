@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import InputError from '@/components/input-error';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import {
     InputOTP,
     InputOTPGroup,
@@ -64,21 +65,39 @@ export default function TwoFactorChallenge() {
                         <>
                             {showRecoveryInput ? (
                                 <>
+                                    <Label
+                                        htmlFor="recovery_code"
+                                        className="sr-only"
+                                    >
+                                        Codice di recupero
+                                    </Label>
                                     <Input
+                                        id="recovery_code"
                                         name="recovery_code"
                                         type="text"
                                         placeholder="Inserisci un codice di recupero"
                                         autoFocus={showRecoveryInput}
                                         required
+                                        aria-invalid={!!errors.recovery_code}
+                                        aria-describedby={
+                                            errors.recovery_code
+                                                ? 'recovery-code-error'
+                                                : undefined
+                                        }
                                     />
                                     <InputError
+                                        id="recovery-code-error"
                                         message={errors.recovery_code}
                                     />
                                 </>
                             ) : (
                                 <div className="flex flex-col items-center justify-center space-y-3 text-center">
+                                    <Label htmlFor="code" className="sr-only">
+                                        Codice di autenticazione
+                                    </Label>
                                     <div className="flex w-full items-center justify-center">
                                         <InputOTP
+                                            id="code"
                                             name="code"
                                             maxLength={OTP_MAX_LENGTH}
                                             value={code}
@@ -86,6 +105,12 @@ export default function TwoFactorChallenge() {
                                             disabled={processing}
                                             pattern={REGEXP_ONLY_DIGITS}
                                             autoFocus
+                                            aria-invalid={!!errors.code}
+                                            aria-describedby={
+                                                errors.code
+                                                    ? 'code-error'
+                                                    : undefined
+                                            }
                                         >
                                             <InputOTPGroup>
                                                 {Array.from(
@@ -100,7 +125,10 @@ export default function TwoFactorChallenge() {
                                             </InputOTPGroup>
                                         </InputOTP>
                                     </div>
-                                    <InputError message={errors.code} />
+                                    <InputError
+                                        id="code-error"
+                                        message={errors.code}
+                                    />
                                 </div>
                             )}
 

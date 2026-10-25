@@ -103,6 +103,7 @@ export function ExpenseLines({
     readOnly = false,
     showSummary = true,
     showHeading = true,
+    showFilters = true,
     contractMode = false,
     defaultDescription = '',
     defaultPeriod,
@@ -121,6 +122,7 @@ export function ExpenseLines({
     readOnly?: boolean;
     showSummary?: boolean;
     showHeading?: boolean;
+    showFilters?: boolean;
     contractMode?: boolean;
     defaultDescription?: string;
     defaultPeriod?: Record<string, string>;
@@ -268,6 +270,7 @@ export function ExpenseLines({
             {
                 id: 'year',
                 label: 'Anno di imputazione',
+                className: 'text-center',
                 value: (line) =>
                     Number(
                         line.year ??
@@ -406,72 +409,82 @@ export function ExpenseLines({
                     )}
                 </div>
             )}
-            <div className="flex flex-wrap items-center gap-2">
-                <TableFilters
-                    title="Filtri righe economiche"
-                    count={(search ? 1 : 0) + (filter !== 'all' ? 1 : 0)}
-                    disabled={disabled}
-                >
-                    <div className="flex flex-col gap-3">
-                        <Input
-                            aria-label="Cerca nelle descrizioni delle righe"
-                            placeholder="Cerca nelle righe…"
-                            value={search}
-                            onChange={(event) => setSearch(event.target.value)}
+            {(showFilters || sorted || !readOnly) && (
+                <div className="flex flex-wrap items-center gap-2">
+                    {showFilters && (
+                        <TableFilters
+                            title="Filtri righe economiche"
+                            count={
+                                (search ? 1 : 0) + (filter !== 'all' ? 1 : 0)
+                            }
                             disabled={disabled}
-                            className="min-w-40 flex-1"
-                        />
-                        <NativeSelect
-                            aria-label="Filtra righe per tipo"
-                            value={filter}
-                            disabled={disabled}
-                            onChange={(event) => setFilter(event.target.value)}
                         >
-                            <NativeSelectOption value="all">
-                                Tutti i tipi
-                            </NativeSelectOption>
-                            <NativeSelectOption value="allocated">
-                                Allocati
-                            </NativeSelectOption>
-                            <NativeSelectOption value="actual">
-                                Effettivi
-                            </NativeSelectOption>
-                        </NativeSelect>
-                        {filtered && (
-                            <Button
-                                type="button"
-                                variant="ghost"
-                                disabled={disabled}
-                                onClick={resetFilters}
-                            >
-                                Azzera filtri
-                            </Button>
-                        )}
-                    </div>
-                </TableFilters>
-                {sorted && (
-                    <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        disabled={disabled}
-                        onClick={() => view.table.setSorting([])}
-                    >
-                        Ripristina ordine manuale
-                    </Button>
-                )}
-                {!readOnly && (
-                    <Button
-                        type="button"
-                        variant="outline"
-                        className="ml-auto"
-                        disabled={disabled || lines.length >= 500}
-                        onClick={add}
-                    >
-                        <Plus data-icon="inline-start" /> Aggiungi riga
-                    </Button>
-                )}
-            </div>
+                            <div className="flex flex-col gap-3">
+                                <Input
+                                    aria-label="Cerca nelle descrizioni delle righe"
+                                    placeholder="Cerca nelle righe…"
+                                    value={search}
+                                    onChange={(event) =>
+                                        setSearch(event.target.value)
+                                    }
+                                    disabled={disabled}
+                                    className="min-w-40 flex-1"
+                                />
+                                <NativeSelect
+                                    aria-label="Filtra righe per tipo"
+                                    value={filter}
+                                    disabled={disabled}
+                                    onChange={(event) =>
+                                        setFilter(event.target.value)
+                                    }
+                                >
+                                    <NativeSelectOption value="all">
+                                        Tutti i tipi
+                                    </NativeSelectOption>
+                                    <NativeSelectOption value="allocated">
+                                        Allocati
+                                    </NativeSelectOption>
+                                    <NativeSelectOption value="actual">
+                                        Effettivi
+                                    </NativeSelectOption>
+                                </NativeSelect>
+                                {filtered && (
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        disabled={disabled}
+                                        onClick={resetFilters}
+                                    >
+                                        Azzera filtri
+                                    </Button>
+                                )}
+                            </div>
+                        </TableFilters>
+                    )}
+                    {sorted && (
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            disabled={disabled}
+                            onClick={() => view.table.setSorting([])}
+                        >
+                            Ripristina ordine manuale
+                        </Button>
+                    )}
+                    {!readOnly && (
+                        <Button
+                            type="button"
+                            variant="outline"
+                            className="ml-auto"
+                            disabled={disabled || lines.length >= 500}
+                            onClick={add}
+                        >
+                            <Plus data-icon="inline-start" /> Aggiungi riga
+                        </Button>
+                    )}
+                </div>
+            )}
             {readOnly && filtered && (
                 <p className="text-xs text-muted-foreground">
                     {visible.length} di {lines.length} righe visibili
@@ -991,7 +1004,7 @@ export function ExpenseLines({
                                             </TableCell>
                                             <TableCell
                                                 key="year"
-                                                className="w-px"
+                                                className="w-px text-center"
                                             >
                                                 {readOnly ? (
                                                     onSaveLine ? (

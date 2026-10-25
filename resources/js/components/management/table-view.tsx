@@ -325,6 +325,8 @@ export function TableViewHeader<T>({
                         (item) => item.id === column.id,
                     )!;
                     const direction = column.getIsSorted();
+                    const centered =
+                        definition.className?.includes('text-center');
                     return (
                         <TableHead
                             key={column.id}
@@ -340,6 +342,10 @@ export function TableViewHeader<T>({
                             <div
                                 className={cn(
                                     'flex items-center gap-1',
+                                    centered && 'justify-center',
+                                    centered &&
+                                        column.id === controlsColumn &&
+                                        'relative px-8',
                                     definition.className?.includes(
                                         'text-right',
                                     ) && 'justify-end',
@@ -370,7 +376,14 @@ export function TableViewHeader<T>({
                                     (definition.header ?? definition.label)
                                 )}
                                 {column.id === controlsColumn && (
-                                    <span className="ml-auto shrink-0">
+                                    <span
+                                        className={cn(
+                                            'shrink-0',
+                                            centered
+                                                ? 'absolute right-0'
+                                                : 'ml-auto',
+                                        )}
+                                    >
                                         <TableViewSettings
                                             view={view}
                                             disabled={disabled}

@@ -120,6 +120,7 @@ import { BudgetCenterSelect } from './budget-entry-sheet';
 import { TableColumnOrder } from './table-column-order';
 import { TableColumnSettings, TableFilters } from './table-view';
 import { draftLines, ExpenseLines } from './expense-lines';
+import { CostCenterTags } from './cost-center-tags';
 import { api, decimalInput, money, varianceTextClass } from './helpers';
 import { budgetLabels, budgetTypes } from './budget-types';
 import type {
@@ -320,14 +321,12 @@ function ExpenseAmount({
     );
 }
 
-function ExpenseRows({
+export function ExpenseRows({
     entry,
     columnIds,
     slug,
     busy,
     highlightEstimate,
-    expandedExpenses,
-    onToggleExpense,
     onExpenseEdit,
     onRecordSave,
 }: {
@@ -336,14 +335,13 @@ function ExpenseRows({
     slug: string;
     busy: boolean;
     highlightEstimate: boolean;
-    expandedExpenses: string[];
-    onToggleExpense: (key: string) => void;
     onExpenseEdit: (id: number) => void;
     onRecordSave: SaveRecord;
 }) {
+    const descriptionIndex = Math.max(0, columnIds.indexOf('description'));
     return entry.expenses.map((expense, index) => {
         const key = `${entry.id}:${expense.id}`;
-        const expanded = expandedExpenses.includes(key);
+        const hasLines = !!expense.lines?.length;
         const missing =
             expense.contributes && entry.estimated_count > 0
                 ? missingAmounts(
@@ -353,8 +351,9 @@ function ExpenseRows({
                 : null;
         const hiddenMissing =
             missing &&
-            ((expense.allocated_amount == null &&
-                !columnIds.includes('allocated')) ||
+            (hasLines ||
+                (expense.allocated_amount == null &&
+                    !columnIds.includes('allocated')) ||
                 (expense.actual_amount == null &&
                     !columnIds.includes('actual')));
         return (
@@ -373,47 +372,42 @@ function ExpenseRows({
                             key={id}
                             className={cn(
                                 'py-1.5',
-                                ['allocated', 'actual'].includes(id) &&
-                                    'text-right financial-value tabular-nums',
+                                ['allocated', 'actual', 'variance'].includes(
+                                    id,
+                                ) && 'text-right financial-value tabular-nums',
                                 id === 'description' && 'whitespace-normal',
                             )}
                         >
-                            {id === 'expand' && !!expense.lines?.length ? (
-                                <Button
-                                    size="icon"
-                                    variant="ghost"
-                                    aria-label={`Righe economiche di ${expense.title}`}
-                                    aria-controls={`budget-expense-lines-${key}`}
-                                    aria-expanded={expanded}
-                                    onClick={() => onToggleExpense(key)}
-                                >
-                                    {expanded ? (
-                                        <ChevronDown />
-                                    ) : (
-                                        <ChevronRight />
-                                    )}
-                                </Button>
-                            ) : id === 'description' ? (
+                            {id === 'description' ? (
                                 <div className="ml-4 flex min-w-48 flex-col gap-1 border-l-2 border-border pl-4">
-                                    <InlineEdit
-                                        value={expense.title}
-                                        label={`Titolo di ${expense.title}`}
-                                        disabled={busy}
-                                        className="font-medium break-words"
-                                        onSave={(value) =>
-                                            onRecordSave(
-                                                'expenses',
-                                                expense.id,
-                                                { title: value },
-                                            )
-                                        }
-                                    />
-                                    <Link
-                                        className="text-xs text-primary"
-                                        href={`/t/${slug}/expenses/${expense.id}`}
-                                    >
-                                        Apri spesa
-                                    </Link>
+                                    <div className="flex items-center gap-1">
+                                        <InlineEdit
+                                            value={expense.title}
+                                            label={`Titolo di ${expense.title}`}
+                                            disabled={busy}
+                                            className="font-medium break-words"
+                                            onSave={(value) =>
+                                                onRecordSave(
+                                                    'expenses',
+                                                    expense.id,
+                                                    { title: value },
+                                                )
+                                            }
+                                        />
+                                        <Button
+                                            asChild
+                                            variant="ghost"
+                                            size="icon"
+                                            className="shrink-0"
+                                        >
+                                            <Link
+                                                href={`/t/${slug}/expenses/${expense.id}`}
+                                                aria-label={`Apri ${expense.title}`}
+                                            >
+                                                <ArrowUpRight />
+                                            </Link>
+                                        </Button>
+                                    </div>
                                     {hiddenMissing && (
                                         <Button
                                             variant="link"
@@ -436,7 +430,39 @@ function ExpenseRows({
                                     )}
                                     <Attribution expense={expense} />
                                 </div>
-                            ) : id === 'allocated' || id === 'actual' ? (
+                            ) : id === 'type' ? (
+                                <Badge variant="secondary">Spesa</Badge>
+                            ) : id === 'vendor' ? (
+                                expense.vendor ? (
+                                    <Link
+                                        href={`/t/${slug}/vendors/${expense.vendor.id}`}
+                                        className="text-foreground"
+                                    >
+                                        {expense.vendor.name}
+                                    </Link>
+                                ) : (
+                                    'Senza fornitore'
+                                )
+                            ) : id === 'center' ? (
+                                expense.cost_centers?.length ? (
+                                    <CostCenterTags
+                                        centers={expense.cost_centers}
+                                    />
+                                ) : (
+                                    'Senza centro di costo'
+                                )
+                            ) : id === 'variance' && !hasLines ? (
+                                <span
+                                    className={varianceTextClass(
+                                        expense.variance,
+                                    )}
+                                >
+                                    {expense.variance == null
+                                        ? 'Non confrontabile'
+                                        : money(expense.variance)}
+                                </span>
+                            ) : (id === 'allocated' || id === 'actual') &&
+                              !hasLines ? (
                                 <ExpenseAmount
                                     value={
                                         expense.contributes
@@ -489,11 +515,17 @@ function ExpenseRows({
                         </TableCell>
                     ))}
                 </TableRow>
-                {expanded && !!expense.lines?.length && (
+                {hasLines && (
                     <TableRow data-budget-detail-owner={entry.id}>
+                        {descriptionIndex > 0 && (
+                            <TableCell
+                                colSpan={descriptionIndex}
+                                className="bg-muted/20 p-0"
+                            />
+                        )}
                         <TableCell
-                            colSpan={columnIds.length}
-                            className="bg-muted/20 p-3 whitespace-normal"
+                            colSpan={columnIds.length - descriptionIndex}
+                            className="bg-muted/20 px-2 py-3 whitespace-normal"
                         >
                             <div
                                 id={`budget-expense-lines-${key}`}
@@ -503,6 +535,7 @@ function ExpenseRows({
                                     readOnly
                                     showSummary={false}
                                     showHeading={false}
+                                    showFilters={false}
                                     contractMode={!!expense.contract_id}
                                     lines={draftLines(expense)}
                                 />
@@ -681,6 +714,7 @@ function EntryDetail({
                     readOnly
                     showSummary={false}
                     showHeading={false}
+                    showFilters={false}
                     contractMode={!!expense.contract_id}
                     lines={draftLines(expense)}
                 />
@@ -745,7 +779,6 @@ export function BudgetTable({
     const [selection, setSelection] = useState<RowSelectionState>({});
     const [expanded, setExpanded] = useState<ExpandedState>(true);
     const [details, setDetails] = useState<number[]>([]);
-    const [expandedExpenses, setExpandedExpenses] = useState<string[]>([]);
     const [completionTarget, setCompletionTarget] = useState<{
         id: number;
     } | null>(null);
@@ -1322,6 +1355,10 @@ export function BudgetTable({
     }
     function renderEntry(row: Row<BudgetEntry>) {
         const entry = row.original;
+        const descriptionIndex = Math.max(
+            0,
+            visibleColumns.findIndex((column) => column.id === 'description'),
+        );
         const highlightEstimate =
             completionTarget?.id === entry.id && entry.estimated_count > 0;
         return (
@@ -1346,14 +1383,23 @@ export function BudgetTable({
                             {(entry.type === 'expense' ||
                                 !entry.expenses.length) && (
                                 <TableRow data-budget-detail-owner={entry.id}>
+                                    {descriptionIndex > 0 && (
+                                        <TableCell
+                                            colSpan={descriptionIndex}
+                                            className="bg-muted/20 p-0"
+                                        />
+                                    )}
                                     <TableCell
-                                        colSpan={visibleColumns.length}
-                                        className="bg-muted/20 p-3 whitespace-normal"
+                                        colSpan={
+                                            visibleColumns.length -
+                                            descriptionIndex
+                                        }
+                                        className="bg-muted/20 px-2 py-3 whitespace-normal"
                                     >
                                         <div
                                             id={`budget-detail-${entry.id}`}
                                             tabIndex={-1}
-                                            className="focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                                            className="ml-4 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                                         >
                                             <EntryDetail
                                                 entry={entry}
@@ -1379,16 +1425,6 @@ export function BudgetTable({
                                     slug={slug}
                                     busy={busy}
                                     highlightEstimate={highlightEstimate}
-                                    expandedExpenses={expandedExpenses}
-                                    onToggleExpense={(key) =>
-                                        setExpandedExpenses((current) =>
-                                            current.includes(key)
-                                                ? current.filter(
-                                                      (value) => value !== key,
-                                                  )
-                                                : [...current, key],
-                                        )
-                                    }
                                     onExpenseEdit={onExpenseEdit}
                                     onRecordSave={onRecordSave}
                                 />

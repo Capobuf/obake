@@ -36,7 +36,7 @@ export function VarianceChart({
     const extent = Math.max(1, ...data.map((row) => Math.abs(row.value)));
     return (
         <AnalyticsCard
-            title="Principali sforamenti e risparmi"
+            title="Principali scostamenti"
             controls={
                 selected !== null && (
                     <ChartReset onReset={() => setSelected(null)} />

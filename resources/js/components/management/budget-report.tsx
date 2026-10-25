@@ -35,7 +35,7 @@ export const budgetReportBlocks = {
     distribution: 'Distribuzione Fornitore',
     projects: 'Allocato ed effettivo per progetto',
     contracts: 'Allocato ed effettivo per contratto',
-    variances: 'Principali sforamenti e risparmi',
+    variances: 'Principali scostamenti',
     table: 'Voci del Budget',
     totals: 'Totale delle voci incluse nel report',
 };

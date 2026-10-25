@@ -113,7 +113,6 @@ function BudgetWorkspace({
     const [add, setAdd] = useState(false);
     const [missing, setMissing] = useState(false);
     const [importing, setImporting] = useState(false);
-    const [typeFilter, setTypeFilter] = useState('all');
     const [error, setError] = useState('');
     const [editing, setEditing] = useState<RecordData | null>(null);
     const [expenseFormBusy, setExpenseFormBusy] = useState(false);
@@ -281,8 +280,6 @@ function BudgetWorkspace({
                 busy={busy || loading || pending}
                 loading={loading || pending}
                 mutate={mutate}
-                typeFilter={typeFilter}
-                setTypeFilter={setTypeFilter}
                 onAdd={() => setAdd(true)}
                 onMissing={() => setMissing(true)}
                 onImport={() => setImporting(true)}

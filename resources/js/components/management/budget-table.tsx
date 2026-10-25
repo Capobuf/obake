@@ -13,7 +13,7 @@ import {
     useMemo,
     useState,
 } from 'react';
-import { Link } from '@inertiajs/react';
+import { Link, router, usePage } from '@inertiajs/react';
 import { toast } from 'sonner';
 import {
     closestCenter,
@@ -117,6 +117,8 @@ import {
 import { cn } from '@/lib/utils';
 import { clearLocalUndo, recordLocalUndo } from '@/lib/undo-state';
 import { BudgetCenterSelect } from './budget-entry-sheet';
+import { budgetFiltersUrl, readBudgetFilters } from './budget-filters';
+import type { BudgetFilters } from './budget-filters';
 import { TableColumnOrder } from './table-column-order';
 import { TableColumnSettings, TableFilters } from './table-view';
 import { draftLines, ExpenseLines } from './expense-lines';
@@ -745,8 +747,6 @@ export function BudgetTable({
     onImport,
     onExpenseEdit,
     onRecordSave,
-    typeFilter,
-    setTypeFilter,
 }: {
     ref?: Ref<BudgetTableHandle>;
     budget: BudgetSnapshot;
@@ -768,8 +768,6 @@ export function BudgetTable({
         id: number,
         changes: Record<string, unknown>,
     ) => Promise<void>;
-    typeFilter: string;
-    setTypeFilter: (value: string) => void;
 }) {
     'use no memo'; // TanStack v8 exposes a mutable table instance to the renderer.
     const [report, setReport] = useState<BudgetReportData | null>(null);
@@ -782,9 +780,51 @@ export function BudgetTable({
     const [completionTarget, setCompletionTarget] = useState<{
         id: number;
     } | null>(null);
-    const [search, setSearch] = useState('');
-    const [vendor, setVendor] = useState('all');
-    const [center, setCenter] = useState('all');
+    const { url } = usePage();
+    const vendors = [
+        ...new Map(
+            budget.entries
+                .filter((row) => row.vendor)
+                .map((row) => [row.vendor!.id, row.vendor!]),
+        ).values(),
+    ];
+    const filters = readBudgetFilters(url, vendors, centers);
+    const {
+        search: querySearch,
+        type: typeFilter,
+        vendor_id: vendor,
+        cost_center_id: center,
+    } = filters;
+    // Keep typing immediate while Inertia queues client-side history updates.
+    const [search, setSearch] = useState(querySearch);
+    useEffect(
+        () =>
+            router.on('navigate', ({ detail }) => {
+                setSearch(
+                    new URL(
+                        detail.page.url,
+                        window.location.origin,
+                    ).searchParams.get('search') ?? '',
+                );
+            }),
+        [],
+    );
+    const canonicalUrl = budgetFiltersUrl(url, filters, year);
+    useEffect(() => {
+        if (canonicalUrl !== url)
+            router.replace({
+                url: canonicalUrl,
+                preserveState: true,
+                preserveScroll: true,
+            });
+    }, [canonicalUrl, url]);
+    function changeFilters(patch: Partial<BudgetFilters>) {
+        router.replace({
+            url: budgetFiltersUrl(url, { ...filters, search, ...patch }, year),
+            preserveState: true,
+            preserveScroll: true,
+        });
+    }
     const hasFilters =
         !!search ||
         typeFilter !== 'all' ||
@@ -1282,7 +1322,6 @@ export function BudgetTable({
         onSortingChange: setSorting,
         onRowSelectionChange: setSelection,
         onExpandedChange: setExpanded,
-        onGlobalFilterChange: setSearch,
         onColumnVisibilityChange: (value) =>
             changePreferences({
                 ...preferences,
@@ -1478,13 +1517,6 @@ export function BudgetTable({
         vendor !== 'all',
         center !== 'all',
     ].filter(Boolean).length;
-    const vendors = [
-        ...new Map(
-            budget.entries
-                .filter((row) => row.vendor)
-                .map((row) => [row.vendor!.id, row.vendor!]),
-        ).values(),
-    ];
     function footer(label: string, totals: typeof budget.totals) {
         return (
             <TableRow>
@@ -1662,16 +1694,19 @@ export function BudgetTable({
                                     aria-label="Cerca nelle voci del Budget"
                                     placeholder="Cerca nelle voci…"
                                     value={search}
-                                    onChange={(event) =>
-                                        setSearch(event.target.value)
-                                    }
+                                    onChange={(event) => {
+                                        setSearch(event.target.value);
+                                        changeFilters({
+                                            search: event.target.value,
+                                        });
+                                    }}
                                 />
                             </InputGroup>
                         </Field>
                         <FilterSelect
                             label="Filtra per tipo"
                             value={typeFilter}
-                            onChange={setTypeFilter}
+                            onChange={(type) => changeFilters({ type })}
                             options={[
                                 {
                                     value: 'all',
@@ -1686,7 +1721,9 @@ export function BudgetTable({
                         <FilterSelect
                             label="Filtra per fornitore"
                             value={vendor}
-                            onChange={setVendor}
+                            onChange={(vendor_id) =>
+                                changeFilters({ vendor_id })
+                            }
                             options={[
                                 {
                                     value: 'all',
@@ -1702,7 +1739,9 @@ export function BudgetTable({
                         <FilterSelect
                             label="Filtra per centro di costo"
                             value={center}
-                            onChange={setCenter}
+                            onChange={(cost_center_id) =>
+                                changeFilters({ cost_center_id })
+                            }
                             options={[
                                 { value: 'all', label: 'Tutti i centri' },
                                 {
@@ -1722,9 +1761,12 @@ export function BudgetTable({
                                 variant="ghost"
                                 onClick={() => {
                                     setSearch('');
-                                    setTypeFilter('all');
-                                    setVendor('all');
-                                    setCenter('all');
+                                    changeFilters({
+                                        search: '',
+                                        type: 'all',
+                                        vendor_id: 'all',
+                                        cost_center_id: 'all',
+                                    });
                                 }}
                             >
                                 Azzera filtri

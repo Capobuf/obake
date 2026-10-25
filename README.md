@@ -416,7 +416,7 @@ ricaricati anche riepiloghi e grafici.
 
 In tutta l’app, report/PDF e XLSX lo scostamento è la somma degli effettivi
 meno la somma degli allocati nel perimetro selezionato, anche su spese distinte.
-Positivo = sovraspesa (senza `+`), negativo = risparmio, zero = pareggio.
+Scostamento positivo = rosso (senza `+`), negativo = verde, zero = neutro.
 Una somma vuota vale zero solo nel calcolo dello scostamento: gli importi
 mancanti restano null e non indicano un errore. Una voce con allocato presente
 e nessun effettivo è segnalata come «Solo stima» con un triangolo grigio e tooltip.
@@ -1037,7 +1037,7 @@ interessata, mantenendo il focus sul comando.
 Le impostazioni valgono per il report aperto. I grafici aggiuntivi sono Distribuzione Fornitore (barre di allocato/effettivo),
 confronto per progetti/contratti e scostamenti.
 Le classifiche mostrano le prime 10 voci più «Altri»; gli scostamenti mostrano
-i 5 maggiori sforamenti e i 5 maggiori risparmi, come nella panoramica.
+fino a 5 scostamenti positivi e 5 negativi, come nella panoramica.
 Non vengono caricati storico, stati dei progetti o scadenze dalla panoramica.
 
 ## Stampa di contratti, progetti e spese

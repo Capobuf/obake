@@ -129,7 +129,7 @@ export function BudgetReportChart({
                                     {heading}
                                     <p className="budget-report-note">
                                         {kind === 'variances'
-                                            ? 'Fino a 5 maggiori sforamenti e 5 maggiori risparmi, come nella panoramica.'
+                                            ? 'Fino a 5 scostamenti positivi e 5 negativi, come nella panoramica.'
                                             : 'Prime 10 voci per effettivo; le restanti sono aggregate in «Altri», come nella panoramica.'}
                                     </p>
                                 </>

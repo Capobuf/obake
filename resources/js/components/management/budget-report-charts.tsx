@@ -28,12 +28,6 @@ export function budgetReportGroups(
         return Object.entries(budget.vendor_groups).map(([id, totals]) => ({
             ...totals,
             id,
-            name:
-                id === 'none'
-                    ? 'Senza fornitore'
-                    : budget.entries.find(
-                          (entry) => String(entry.vendor?.id) === id,
-                      )!.vendor!.name,
         }));
     return budget.entries
         .filter(

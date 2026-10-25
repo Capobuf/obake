@@ -47,7 +47,7 @@ export type BudgetSnapshot = {
     totals: BudgetTotals;
     groups: Record<BudgetType, BudgetTotals>;
     cost_center_groups: Record<string, BudgetTotals>;
-    vendor_groups: Record<string, BudgetTotals>;
+    vendor_groups: Record<string, BudgetTotals & { name: string }>;
     owners: Record<string, number>;
     has_missing_entries: boolean;
     warnings: string[];

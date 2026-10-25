@@ -135,6 +135,7 @@ describe('table search', () => {
         expect(html).toContain('aria-expanded="false"');
         expect(html).toContain('aria-label="Cerca in questa tabella"');
         expect(html).toContain('motion-reduce:transition-none');
-        expect(html).not.toContain('<input');
+        expect(html).toContain('aria-hidden="true"');
+        expect(html).toContain('disabled=""');
     });
 });

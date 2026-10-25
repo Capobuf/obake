@@ -92,6 +92,63 @@ function table(search = '', sorted = true) {
 }
 
 describe('Budget report', () => {
+    it.each([0, 8])(
+        'keeps one chart heading with its first content for %s entries',
+        (count) => {
+            const html = renderToStaticMarkup(
+                <BudgetReport
+                    data={{
+                        budget: {
+                            ...summary,
+                            entries: Array.from({ length: count }, (_, id) => ({
+                                ...entries[0],
+                                id,
+                                type: 'contract',
+                            })),
+                        },
+                        filters: [],
+                    }}
+                    options={{
+                        ...defaultBudgetReportOptions('Test'),
+                        blocks: ['contracts'],
+                    }}
+                    tenantName="Test"
+                    year={2026}
+                    createdAt="25/10/2026"
+                />,
+            );
+            expect(html).toMatch(/class="budget-report-block"><h2>/);
+            expect(html.match(/<h2>/g)).toHaveLength(1);
+            expect(html.match(/budget-report-chart-batch/g) ?? []).toHaveLength(
+                count === 0 ? 0 : 2,
+            );
+        },
+    );
+
+    it.each([true, false])(
+        'keeps the table title inside the first entry group (grouped=%s)',
+        (groupByType) => {
+            const html = renderToStaticMarkup(
+                <BudgetReport
+                    data={{ budget: summary, filters: [] }}
+                    options={{
+                        ...defaultBudgetReportOptions('Test'),
+                        blocks: ['table'],
+                        groupByType,
+                    }}
+                    tenantName="Test"
+                    year={2026}
+                    createdAt="25/10/2026"
+                />,
+            );
+            expect(html).toMatch(
+                /class="budget-report-block budget-report-entry-group"><h2>.*?Voci del Budget<\/h2>(?:<h3[^>]*>Spese singole<\/h3>)?<table/s,
+            );
+            expect(html.match(/<h2>/g)).toHaveLength(1);
+            expect(html.match(/data-entry-id=/g)).toHaveLength(entries.length);
+        },
+    );
+
     it.each([
         [true, true],
         [true, false],

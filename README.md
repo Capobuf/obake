@@ -1071,12 +1071,16 @@ Il testo del file non è selezionabile; la tabella non ripete l’intestazione s
 ogni pagina. L’override `html2canvas-pro` supporta i colori CSS usati da Tailwind 4.
 Il generatore viene caricato solo al clic. I report troppo lunghi per il canvas
 vengono bloccati con un messaggio: restringere i filtri oppure usare **Stampa**.
+Nel Budget i titoli restano uniti al primo grafico o gruppo di voci. Un gruppo
+di tabella più alto dell’area utile A4 inizia su una pagina nuova nel download;
+le sue righe proseguono sulle pagine successive senza ripetere l’intestazione.
 
 **Stampa** apre la stampa del browser tramite `react-to-print`:
 in Chrome scegliere **Salva come PDF**, carta A4, scala 100% e controllare tutte
 le pagine. L’anteprima nell’app mostra il documento continuo; quella di Chrome
 mostra l’impaginazione effettiva. Le impostazioni del browser possono prevalere
 su formato e margini CSS.
+La stampa nativa ripete invece le intestazioni delle tabelle multipagina.
 
 Controlli del prototipo, con database PHP separato `testing`:
 
@@ -1091,7 +1095,8 @@ php artisan test --filter='SectionReportTest|AnnualBudgetTest|TenantIdentityTest
 Prima dell’approvazione verificare nell’app: filtri singoli e combinati, zero/una/
 molte righe, colonne nascoste e riordinate, descrizioni lunghe, due anni, logo sì/no,
 A4 verticale/orizzontale e tema light/dark. Confrontare i totali e controllare nel
-PDF grafico, intestazioni ripetute e righe complete su tutte le pagine.
+PDF grafico titoli e righe complete; nella stampa nativa verificare anche le
+intestazioni ripetute su tutte le pagine della tabella.
 
 ### Lingua italiana
 

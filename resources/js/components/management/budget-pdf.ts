@@ -30,9 +30,30 @@ export async function downloadBudgetPdf(
         enableLinks: false,
         html2canvas: { scale: 2, backgroundColor: '#ffffff', logging: false },
         jsPDF: { unit: 'mm', format: 'a4', orientation },
-        pagebreak: { mode: ['css'], avoid: ['tr', 'svg', 'img'] },
+        pagebreak: {
+            mode: ['css'],
+            avoid: ['thead', 'tr', 'svg', 'img'],
+        },
     };
-    const worker = html2pdf().set(options).from(element);
+    const pageHeight =
+        (((orientation === 'portrait' ? 297 : 210) -
+            options.margin[0] -
+            options.margin[2]) *
+            96) /
+        25.4;
+    // Oversized groups cannot be kept intact: start their title and first row on a fresh page.
+    const before = Array.from(
+        element.querySelectorAll<HTMLElement>('.budget-report-entry-group'),
+    ).flatMap((group, index) =>
+        group.getBoundingClientRect().height > Math.floor(pageHeight)
+            ? [`.budget-report-entry-group:nth-child(${index + 1})`]
+            : [],
+    );
+    const bodyOptions = {
+        ...options,
+        pagebreak: { ...options.pagebreak, before },
+    };
+    const worker = html2pdf().set(bodyOptions).from(element);
     const footerWorker = html2pdf().set(options).from(footerReport);
     try {
         await worker.toContainer();
